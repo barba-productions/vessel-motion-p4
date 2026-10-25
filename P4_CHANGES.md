@@ -294,6 +294,22 @@ updated with every change session.
 - Released v1.0.1 to the OTA repo via `release_ota.ps1 -Version 1.0.1`
   (first end-to-end run of the workflow).
 
+## 2026-10-25 — v1.0.2: OTA diagnostics (manifest "different product" mystery)
+
+- OTA 1.0.0 → 1.0.1 test: TLS now validates and the manifest downloads, but the
+  device reported "manifest is for a different product" even though the binary
+  (null-terminated string scan), source and live manifest all carry
+  `product=vessel-motion-p4`, and an offline re-run of the firmware's JSON
+  parsing passes. The received bytes must differ from what we see.
+- v1.0.2 adds diagnostics (`main/ota.c`): HTTP status check on downloads (the
+  old code happily parsed 404/redirect bodies), the first 220 manifest bytes
+  go to the serial log, and the product/schema failure message now includes
+  the parsed values.
+- Test procedure: flash 1.0.2 over USB, press UPDATE — if the manifest is
+  valid the device reports "current" (1.0.2 == 1.0.2); otherwise the serial
+  log shows exactly what was received. Then release 1.0.3 for the real
+  update test.
+
 ### Notes for the Pi port
 - `storage.py DEFAULT_SETTINGS` needs: `resetOnTripStart: False`, `ntp: ""`.
 - `api.py`: `/api/storage` gains the `logs` object; `/api/trips` maximum 100;
