@@ -1,0 +1,125 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Flash P4 and list web FS",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\flash_p4.ps1\""
+		},
+		{
+			"label": "Flash P4 and list web FS (sq)",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\flash_p4.ps1'"
+		},
+		{
+			"label": "Locate P4 web assets",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Get-ChildItem 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\web' -Recurse -File | Select-Object -First 30 -ExpandProperty FullName\""
+		},
+		{
+			"label": "Find Pi web assets",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\find_web.ps1'"
+		},
+		{
+			"label": "Build flash stage web assets",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\stage_web.ps1'"
+		},
+		{
+			"label": "Find theme.js and web file list",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\find_theme.ps1'"
+		},
+		{
+			"label": "Grep theme in Pi project",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\grep_theme.ps1'"
+		},
+		{
+			"label": "Find Pi settings defaults",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\find_defaults.ps1'"
+		},
+		{
+			"label": "Build flash theme.js fix",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\flash_theme.ps1'"
+		},
+		{
+			"label": "Find header injection logic",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\find_header.ps1'"
+		},
+		{
+			"label": "Build flash verify template fixes",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\flash_verify.ps1'"
+		},
+		{
+			"label": "Build flash query-strip fix",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\flash_theme.ps1'"
+		},
+		{
+			"label": "Build flash time POST fix",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\flash_theme.ps1'"
+		},
+		{
+			"label": "Test GLB serving stability",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\test_glb.ps1'"
+		},
+		{
+			"label": "Survey Pi storage defs and JS fetch calls",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\pi_survey.ps1'"
+		},
+		{
+			"label": "Survey settings/diagnostics JS API usage",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\pi_survey2.ps1'"
+		},
+		{
+			"label": "Check P4 build log",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"$log = Get-Content $env:TEMP\\p4_build.log -Raw -Encoding Unicode; if ($log -match 'Project build complete') { 'BUILD OK' } elseif ($log -match 'ninja failed') { 'BUILD FAILED' } else { 'STILL RUNNING or empty'; $log.Substring([Math]::Max(0, $log.Length - 800)) }\""
+		},
+		{
+			"label": "Check P4 build status",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\check_build.ps1'"
+		},
+		{
+			"label": "Get P4 build errors",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\check_build.ps1'"
+		},
+		{
+			"label": "P4 build",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\build_p4.ps1'"
+		},
+		{
+			"label": "P4 final build",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\build_p4.ps1'"
+		},
+		{
+			"label": "Survey resources file timestamps",
+			"type": "shell",
+			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\survey_files.ps1'"
+		},
+		{
+			"label": "Check firmware binary time",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command \"Get-Item 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\build\\vessel_motion_p4.bin' | Select-Object -ExpandProperty LastWriteTime; Get-Date -Format 'HH:mm:ss'\""
+		},
+		{
+			"label": "Check binary timestamp",
+			"type": "shell",
+			"command": "powershell -NoProfile -Command (Get-Item 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\build\\vessel_motion_p4.bin').LastWriteTime.ToString('HH:mm:ss')"
+		}
+	]
+}

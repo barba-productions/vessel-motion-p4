@@ -1,0 +1,14 @@
+CompileFlags:
+    Remove: [-f*, -m*]
+
+# FreeRTOS requires freertos/FreeRTOS.h before freertos/task.h, so do not flag
+# "included header not used directly".
+Diagnostics:
+    UnusedIncludes: None
+
+# Do not write the background index into build/.cache — its temp files race
+# with `idf.py fullclean`/`set-target` on Windows and break the build.
+Index:
+    Background:
+        Build: No
+

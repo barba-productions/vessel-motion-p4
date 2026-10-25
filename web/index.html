@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" class="hide-fullscreen font-pending">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Vessel Motion</title>
+    <meta name="application-name" content="Vessel Motion" />
+    <meta name="apple-mobile-web-app-title" content="Vessel Motion" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#041923" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/android-chrome-192x192.png" />
+    <link rel="apple-touch-icon" href="/icons/android-chrome-192x192.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script src="/theme.js"></script>
+    <link rel="preload" href="/fonts/chakra-petch.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/vendor/uPlot.min.css" />
+    <link rel="stylesheet" href="/app.css" />
+    <link rel="stylesheet" href="/large-type.css" />
+    <link rel="stylesheet" href="/header.css" />
+  </head>
+  <body>
+    <div class="mfd-shell">
+      <header class="topbar">
+        {{shared_header}}
+      </header>
+      <script>
+        if(window.vmUiSettings){
+          document.getElementById("productName").textContent=window.vmUiSettings.productName||"";
+          document.getElementById("vesselName").textContent=window.vmUiSettings.vessel||"";
+        }
+      </script>
+
+      <main class="dashboard">
+        <div class="view-toolbar" aria-label="Trend chart selection">
+          <div class="trend-tabs">
+            <button type="button" class="active" data-trend="acceleration">ACCELERATION</button>
+            <button type="button" data-trend="attitude">ATTITUDE</button>
+          </div>
+          <span>DRAG TO PAN · WHEEL OR PINCH TO ZOOM</span>
+          <button type="button" id="resetZoom">RESET VIEW</button>
+        </div>
+        <section class="instrument-panel acceleration-panel">
+          <header class="instrument-heading"><strong>ACCELERATION</strong><small>LINEAR ACCELERATION (G)</small></header>
+          <div class="acceleration-instruments">
+            <div class="vertical-accel" id="verticalAccel">
+              <small>VERT</small><div class="vertical-track"><div class="arrow arrow-up">▲</div><i></i><span id="verticalMarker"></span><em>0</em><i></i><div class="arrow arrow-down">▼</div></div>
+            </div>
+            <div class="gforce-wrap"><b>G-Force</b>
+              <svg id="accelHud" class="accel-hud" viewBox="0 0 420 420" aria-label="Lateral and longitudinal acceleration">
+                <g class="accel-grid"><circle cx="210" cy="210" r="42"/><circle cx="210" cy="210" r="84"/><circle cx="210" cy="210" r="126"/><circle class="perimeter" cx="210" cy="210" r="168"/><path d="M42 210H378M210 42V378"/></g>
+                <g class="accel-labels"><text x="210" y="24">LONG +1.0</text><text x="210" y="408">-1.0</text><text x="8" y="202">-1.0</text><text x="412" y="202" text-anchor="end">1.0</text><text x="251" y="204">.25</text><text x="293" y="204">.50</text><text x="335" y="204">.75</text></g>
+                <g id="accelTrail"></g><line id="accelVector" class="accel-vector" x1="210" y1="210" x2="210" y2="210"/><circle class="accel-origin" cx="210" cy="210" r="4"/><circle id="accelPoint" class="accel-point" cx="210" cy="210" r="8"/>
+              </svg>
+            </div>
+          </div>
+          <div id="impact" class="impact-indicator">IMPACT</div>
+        </section>
+
+        <section class="instrument-panel attitude-panel">
+          <header class="instrument-heading"><strong>VESSEL ATTITUDE</strong><small>3D ORIENTATION (REAL-TIME)</small></header>
+          <canvas id="scene"></canvas>
+          <div class="attitude-hud" aria-hidden="true">
+            <div class="roll-title"><span id="horizontalMotionTitle">ROLL (°)</span><em id="roll">0.0°</em></div>
+            <svg class="roll-gauge" viewBox="0 0 420 150"><path d="M52 132A164 164 0 0 1 368 132"/><g><text x="48" y="140">-45</text><text x="88" y="83">-30</text><text x="145" y="48">-15</text><text x="210" y="35">0</text><text x="275" y="48">15</text><text x="332" y="83">30</text><text x="372" y="140">45</text></g><polygon id="rollMarker" points="0,0 -11,-23 11,-23" transform="translate(210 12)"/></svg>
+            <div class="vessel-axis"><span id="axisLeft">◀ PORT</span><i></i><span id="axisRight">STBD ▶</span></div>
+            <div class="pitch-gauge"><b id="verticalMotionTitle">PITCH (°)</b><div class="pitch-scale"><span>+45</span><span>+30</span><span>+15</span><span>0</span><span>-15</span><span>-30</span><span>-45</span><i id="pitchMarker"></i></div><em id="pitch">0.0°</em></div>
+          </div>
+        </section>
+
+        <aside class="gauge-stack">
+          <div class="instrument-panel metric-gauge" data-metric="mci"><header class="instrument-heading"><svg class="metric-title-icon" viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="13" r="7"/><path d="M29 22v16m0-10l-11 9m11-6l13 8M12 47c8-8 15-8 22-2s13 6 21-2M10 56c8-8 15-8 22-2s14 6 22-2"/></svg><strong>MOTION COMFORT INDEX</strong><small>HOW IT FEELS ON BOARD</small></header><div class="mode-selector"><button data-mode="instant" class="active">INSTANT</button><button data-mode="trip">TRIP AVG</button><button data-mode="hours">LAST HOURS</button></div><div class="hours-selector" hidden><button data-hours="1">1H</button><button data-hours="3" class="active">3H</button><button data-hours="6">6H</button><button data-hours="12">12H</button><button data-hours="24">24H</button></div><svg class="severity-gauge" viewBox="0 0 512 256"><defs><linearGradient id="mciGradient" x1="30" y1="240" x2="482" y2="240" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#32e889"/><stop offset=".38" stop-color="#dff044"/><stop offset=".68" stop-color="#ff9d32"/><stop offset="1" stop-color="#ff3b43"/></linearGradient></defs><path class="gauge-track" d="M30 240A226 226 0 0 1 482 240"/><path class="gauge-color" d="M30 240A226 226 0 0 1 482 240" stroke="url(#mciGradient)"/><circle class="gauge-marker" id="mciMarker" cx="30" cy="240" r="9"/><text class="gauge-value" id="mciValue" x="256" y="164">0.0</text><text class="gauge-state" id="mciState" x="256" y="188">COMFORTABLE</text><text class="gauge-scale-label gauge-scale-start" x="55" y="252">MORE COMFORTABLE</text><text class="gauge-scale-label gauge-scale-end" x="457" y="252">LESS COMFORTABLE</text></svg><span class="gauge-caption" id="mciCaption">INSTANT</span></div>
+          <div class="instrument-panel metric-gauge" data-metric="rsi"><header class="instrument-heading"><svg class="metric-title-icon" viewBox="0 0 64 64" aria-hidden="true"><path d="M4 42c10 2 15-4 20-14 4-8 9-13 16-15-3 5-2 12 2 17 4 6 10 9 18 9-8 10-19 14-31 11-9-2-17-1-25 3M7 57c9-6 17-6 25-2s16 4 25-2"/></svg><strong>RIDE SEVERITY INDEX</strong><small>SEA IMPACT ON VESSEL</small></header><div class="mode-selector"><button data-mode="instant" class="active">INSTANT</button><button data-mode="trip">TRIP AVG</button><button data-mode="hours">LAST HOURS</button></div><div class="hours-selector" hidden><button data-hours="1">1H</button><button data-hours="3" class="active">3H</button><button data-hours="6">6H</button><button data-hours="12">12H</button><button data-hours="24">24H</button></div><svg class="severity-gauge" viewBox="0 0 512 256"><defs><linearGradient id="rsiGradient" x1="30" y1="240" x2="482" y2="240" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#32e889"/><stop offset=".38" stop-color="#dff044"/><stop offset=".68" stop-color="#ff9d32"/><stop offset="1" stop-color="#ff3b43"/></linearGradient></defs><path class="gauge-track" d="M30 240A226 226 0 0 1 482 240"/><path class="gauge-color" d="M30 240A226 226 0 0 1 482 240" stroke="url(#rsiGradient)"/><circle class="gauge-marker" id="rsiMarker" cx="30" cy="240" r="9"/><text class="gauge-value" id="rsiValue" x="256" y="164">0.0</text><text class="gauge-state" id="rsiState" x="256" y="188">CALM</text><text class="gauge-scale-label gauge-scale-start" x="55" y="252">CALMER SEA</text><text class="gauge-scale-label gauge-scale-end" x="457" y="252">MORE SEVERE</text></svg><span class="gauge-caption" id="rsiCaption">INSTANT</span></div>
+        </aside>
+
+        <article class="instrument-panel history-panel acceleration-history"><header class="instrument-heading"><strong>ACCELERATION (G-FORCE)</strong><small>LINEAR ACCELERATION OVER TIME · <b id="accelerationTimeScale">10 MIN SCALE</b></small></header><div id="accelerationChart"></div><span class="chart-legend-overlay"><i class="key lat"></i>LAT <i class="key long"></i>LONG <i class="key vert"></i>VERT <i class="key impact"></i>IMPACT</span></article>
+        <article class="instrument-panel history-panel attitude-history"><header class="instrument-heading"><strong>ATTITUDE</strong><small>ROLL AND PITCH OVER TIME · <b id="attitudeTimeScale">10 MIN SCALE</b></small></header><div id="attitudeChart"></div><span class="chart-legend-overlay"><i class="key roll"></i>ROLL <i class="key pitch"></i>PITCH</span></article>
+        <article class="instrument-panel heatmap-panel"><header class="instrument-heading"><strong>TRIP COMFORT INDEX HEAT MAP</strong><small>MOTION COMFORT VS RIDE SEVERITY</small></header><canvas id="heatmap"></canvas><span class="heatmap-legend-title">% OF TRIP TIME</span><div class="heatmap-legend"><span>15%+</span><i></i><span>0%</span></div><span class="heat-x">RIDE SEVERITY INDEX</span><span class="heat-y">MOTION COMFORT INDEX</span></article>
+        <article class="instrument-panel trip-history-panel"><header class="instrument-heading"><strong>TRIP HISTORY</strong><small>LAST 100 COMPLETED TRIPS · SELECT A TRIP TO EXPAND</small></header><div id="tripHistoryList" class="trip-history-list"><p class="trip-history-empty">Loading trip history...</p></div></article>
+      </main>
+
+      <footer class="command-bar">
+        <div class="command-group primary"><button class="command start" id="tripToggle" data-command="start"><span id="tripIcon">▶</span><b id="tripLabel">START TRIP</b></button><button class="command" data-command="zero"><span>◎</span>ZERO</button><button class="command reset" id="resetCharts"><span>↻</span>RESET</button><span class="trip-status" id="tripStatus">TRIP START -- · DURATION --:--:--</span></div>
+        <div class="command-group secondary"><button class="command" id="full"><span>⛶</span>FULLSCREEN</button><a class="command" href="/settings"><span>⚙</span>SETTINGS</a></div>
+      </footer>
+    </div>
+    <script src="/vendor/three.min.js"></script>
+    <script src="/vendor/GLTFLoader.js"></script>
+    <script src="/vendor/uPlot.iife.min.js"></script>
+    <script src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,21 @@
+{
+    "idf.currentSetup": "C:\\esp\\v5.5.3\\esp-idf",
+    "idf.port": "COM3",
+    "idf.flashType": "UART",
+    "idf.postFlashTask": "powershell -NoProfile -ExecutionPolicy Bypass -File C:\\Users\\barba\\OneDrive\\DOCUME~1\\___ARD~1\\PRAC37~1.VES\\UPLOAD~1.PS1",
+    "idf.openOcdConfigs": [
+        "board/esp32p4-builtin.cfg"
+    ],
+    "idf.customExtraVars": {
+        "IDF_TARGET": "esp32p4",
+        "IDF_COMPONENT_CACHE_PATH": "C:\\cm"
+    },
+    "clangd.path": "C:\\Espressif\\tools\\esp-clang\\esp-19.1.2_20250312\\esp-clang\\bin\\clangd.exe",
+    "clangd.arguments": [
+      "--background-index",
+      "--query-driver=**",
+      "--compile-commands-dir=c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\build"
+    ],
+    "C_Cpp.intelliSenseEngine": "disabled",
+    "C_Cpp.errorSquiggles": "disabled"
+}

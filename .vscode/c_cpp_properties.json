@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "name": "ESP-IDF",
+            "compilerPath": "",
+            "compileCommands": "${workspaceFolder}/build/compile_commands.json",
+            "cStandard": "c17",
+            "intelliSenseMode": "gcc-riscv32",
+            "configurationProvider": "espressif.esp-idf-extension"
+        }
+    ],
+    "version": 4
+}

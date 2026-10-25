@@ -1,0 +1,12 @@
+## Wi-Fi coprocessor (ESP32-C6 via SDIO) for the ESP32-P4-NANO.
+## Versions pinned to the Waveshare-tested set, which matches the C6's factory
+## slave firmware (host 3.x caused a major-version transport mismatch).
+dependencies:
+  espressif/esp_wifi_remote:
+    version: "0.14.*"
+  espressif/esp_hosted:
+    version: "1.4.*"
+  joltwallet/littlefs:
+    version: "1.*"
+  idf:
+    version: ">=5.3"

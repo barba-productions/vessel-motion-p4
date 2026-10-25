@@ -1,0 +1,57 @@
+# ---------------------------------------------------------------------------
+# Waveshare ESP32-P4-NANO - board-level defaults
+# Chip: ESP32-P4NRW32 (32 MB in-package PSRAM, external 16 MB QSPI NOR flash)
+# These defaults are applied on a fresh "idf.py set-target esp32p4" / first build.
+# ---------------------------------------------------------------------------
+
+# Target chip
+CONFIG_IDF_TARGET="esp32p4"
+
+# --- Flash: 16 MB NOR flash (per Waveshare specification) ---
+# Flash mode intentionally left at the ESP-IDF default (DIO); Waveshare's own
+# demos run the P4-NANO in DIO, which is the safe bring-up mode for this module.
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+
+# --- PSRAM: 32 MB in-package Hex-PSRAM, 200 MHz DDR ---
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_HEX=y
+CONFIG_SPIRAM_SPEED_200M=y
+
+# --- Ethernet: onboard IP101GRI PHY over RMII (Phase 2) ---
+CONFIG_ETH_ENABLED=y
+CONFIG_ETH_USE_ESP32_EMAC=y
+CONFIG_ETH_PHY_IP101=y
+CONFIG_ETH_RMII_CLK_INPUT=y
+CONFIG_ETH_RMII_CLK_IN_GPIO=50
+# Internal EMAC DMA buffers into PSRAM (frees internal RAM for the app)
+CONFIG_ETH_DMA_BUFFER_SIZE=1600
+CONFIG_ETH_DMA_RX_BUFFER_NUM=10
+CONFIG_ETH_DMA_TX_BUFFER_NUM=10
+
+# --- HTTP server ---
+CONFIG_HTTPD_MAX_REQ_HDR_LEN=1024
+CONFIG_HTTPD_MAX_URI_LEN=512
+CONFIG_HTTPD_MAX_URI_HANDLERS=24
+CONFIG_HTTPD_WS_SUPPORT=y
+
+# --- SD card (SDIO 3.0, 4-wire) + FATFS ---
+CONFIG_SDMMC_ENABLE=y
+CONFIG_FATFS_LFN_HEAP=y
+CONFIG_FATFS_FS_LOCK=4
+CONFIG_FATFS_MAX_LFN=255
+
+# --- Custom partition table (dual OTA slots) ---
+CONFIG_PARTITION_TABLE_CUSTOM=y
+CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
+CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
+
+# --- Wi-Fi (ESP32-C6 coprocessor via esp_hosted + esp_wifi_remote) ---
+# The esp_hosted/esp_wifi_remote components enable their own Kconfig options
+# when the managed components are fetched. Wi-Fi protocol stack is required.
+CONFIG_ESP_WIFI_ENABLED=y
+
+# --- OTA / app image ---
+CONFIG_APP_PROJECT_VER="0.1.7-p4"
+
+# Ethernet (IP101GRI, RMII) is the primary network. Wi-Fi (ESP32-C6 via SDIO,
+# espressif/esp_hosted + espressif/esp_wifi_remote) is added in Phase 3.

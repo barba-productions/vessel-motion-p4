@@ -1,0 +1,123 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Motion Diagnostics</title>
+    <meta name="application-name" content="Vessel Motion" />
+    <meta name="apple-mobile-web-app-title" content="Vessel Motion" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="theme-color" content="#041923" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/android-chrome-192x192.png" />
+    <link rel="apple-touch-icon" href="/icons/android-chrome-192x192.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <script src="/theme.js"></script>
+    <link rel="preload" href="/fonts/chakra-petch.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      main {
+        display: block;
+        max-width: 1100px;
+        padding: 20px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+        gap: 8px;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid #214348;
+        padding: 6px;
+      }
+      pre {
+        white-space: pre-wrap;
+        color: #48e1c1;
+      }
+      .note {
+        color: #ffbf4b;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="brand"><span id="productName">VESSEL MOTION</span> / DIAGNOSTICS</div>
+      <nav><a href="/">Instrument</a><a href="/settings">Settings</a></nav>
+    </header>
+    <main>
+      <p class="note">
+        Engineering diagnostics. RSI and MEI are experimental tuning metrics,
+        not scientific, regulatory, medical, or ISO-compliant measurements.
+      </p>
+      <div class="grid" id="grid"></div>
+    </main>
+    <script>
+      fetch("/api/settings").then(function(response){return response.json()}).then(function(settings){document.documentElement.dataset.font=Number(settings.uiFont)===1?"roboto":"chakra";document.documentElement.dataset.theme=Number(settings.colorScheme)===1?"grey":"blue";document.getElementById("productName").textContent=settings.productName||"VESSEL MOTION"}).catch(function(){});
+      var names = {
+        roll: "Roll deg",
+        pitch: "Pitch deg",
+        raw: "Raw accel m/s2",
+        mapped: "Mapped accel m/s2",
+        gyro: "Gyro rad/s",
+        gravity: "Gravity m/s2",
+        a: "Dynamic accel g",
+        af: "Fast resultant g",
+        as: "Slow resultant g",
+        peak: "Window peak g",
+        rms: "Window RMS g",
+        jerk: "Jerk g/s",
+        rates: "Roll / pitch rate deg/s",
+        impact: "Impact active",
+        trip: "Trip active",
+        sampleHz: "Sample Hz",
+        wsHz: "WebSocket Hz",
+        errors: "Sensor errors",
+        missed: "Missed samples",
+        invalid: "Invalid samples",
+        timeVerified: "Absolute time verified",
+      };
+      function render(d) {
+        var h = "";
+        Object.keys(names).forEach(function (k) {
+          h +=
+            '<div class="row"><span>' +
+            names[k] +
+            "</span><b>" +
+            JSON.stringify(d[k]) +
+            "</b></div>";
+        });
+        Object.keys(d.rsi).forEach(function (k) {
+          h +=
+            '<div class="row"><span>RSI ' +
+            k +
+            "</span><b>" +
+            JSON.stringify(d.rsi[k]) +
+            "</b></div>";
+        });
+        Object.keys(d.mei).forEach(function (k) {
+          h +=
+            '<div class="row"><span>MEI ' +
+            k +
+            "</span><b>" +
+            JSON.stringify(d.mei[k]) +
+            "</b></div>";
+        });
+        document.getElementById("grid").innerHTML = h;
+      }
+      var ws = new WebSocket((location.protocol === "https:" ? "wss:" : "ws:") + "//" + location.host + "/ws");
+      ws.onmessage = function (e) {
+        render(JSON.parse(e.data));
+      };
+      ws.onerror = function () {
+        setInterval(function () {
+          fetch("/api/telemetry")
+            .then(function (r) {
+              return r.json();
+            })
+            .then(render);
+        }, 500);
+      };
+    </script>
+  </body>
+</html>
