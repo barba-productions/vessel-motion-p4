@@ -260,6 +260,27 @@ updated with every change session.
 - Pi port note: the Pi has full zoneinfo so no mapping is needed there; only
   port the label/readout UI change.
 
+## 2026-10-25 — Firmware v1.0.0, GitHub repos, OTA workflow
+
+- **Version 1.0.0**: `CMakeLists.txt` → `project(vessel_motion_p4 VERSION 1.0.0)`
+  (feeds `esp_app_get_description()->version`, the OTA "current version");
+  `P4_VERSION` cache-bust string in `main/webserver.c` → "1.0.0".
+- **GitHub**: main repo pushed to
+  `github.com/barba-productions/vessel-motion-p4` (code + web assets);
+  public OTA repo pushed to `github.com/barba-productions/vessel-motion-p4-OTA`
+  (stable/manifest.json + firmware binary only).
+- **OTA fixes** (`main/ota.c`): attached the x509 certificate bundle to the
+  HTTPS client (was missing → TLS to GitHub would have failed); product string
+  is now `vessel-motion-p4` (was `vessel-motion-pi`); the default manifest URL
+  in `main/webserver.c` now points at the P4 OTA repo.
+  Note: the manifest `sha256` is published but the firmware currently relies on
+  `esp_ota_end()` image validation rather than comparing the manifest hash.
+- **OTA release workflow**: `release_ota.ps1 -Version x.y.z` bumps the version,
+  builds, packages `build/vessel_motion_p4.bin` into the OTA repo clone at
+  `..\vessel-motion-p4-OTA\stable\`, regenerates the manifest, commits and
+  pushes. OTA carries firmware only; web assets ship via `upload_web.ps1`.
+- Pi port note: none — this is P4-specific infrastructure.
+
 ### Notes for the Pi port
 - `storage.py DEFAULT_SETTINGS` needs: `resetOnTripStart: False`, `ntp: ""`.
 - `api.py`: `/api/storage` gains the `logs` object; `/api/trips` maximum 100;
