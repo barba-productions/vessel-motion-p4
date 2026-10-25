@@ -67,6 +67,13 @@ static esp_err_t http_get_all(const char *url, char *buf, size_t cap, size_t *ou
     esp_err_t err = esp_http_client_open(c, 0);
     if (err != ESP_OK) { esp_http_client_cleanup(c); return err; }
     int total = esp_http_client_fetch_headers(c);
+    int status = esp_http_client_get_status_code(c);
+    if (status != 200) {
+        ESP_LOGW(TAG, "HTTP %d downloading %s", status, url);
+        esp_http_client_close(c);
+        esp_http_client_cleanup(c);
+        return ESP_ERR_INVALID_RESPONSE;
+    }
     size_t n = 0;
     while (n < cap - 1) {
         int r = esp_http_client_read(c, buf + n, cap - 1 - n);
@@ -88,10 +95,12 @@ static void ota_task(void *arg)
 
     char *manifest = malloc(4096);
     if (!manifest) { set_status("failed", "out of memory"); goto done; }
-    if (http_get_all(url, manifest, 4096, NULL) != ESP_OK) {
-        set_status("failed", "could not download manifest");
+    size_t mlen = 0;
+    if (http_get_all(url, manifest, 4096, &mlen) != ESP_OK) {
+        set_status("failed", "could not download manifest (see serial log for HTTP status)");
         goto done_manifest;
     }
+    ESP_LOGI(TAG, "manifest (%u bytes): %.220s", (unsigned)mlen, manifest);
 
     char product[32], version[24], arch[24], fw_url[256], sha[80];
     long size = 0, schema = 0;
@@ -106,7 +115,11 @@ static void ota_task(void *arg)
         goto done_manifest;
     }
     if (schema != 1 || strcmp(product, OTA_PRODUCT) != 0) {
-        set_status("failed", "manifest is for a different product");
+        char detail[100];
+        snprintf(detail, sizeof(detail),
+                 "wrong product/schema: product='%s' schema=%ld (need %s/1)",
+                 product, schema, OTA_PRODUCT);
+        set_status("failed", detail);
         goto done_manifest;
     }
     if (strcmp(arch, OTA_ARCH) != 0) {
