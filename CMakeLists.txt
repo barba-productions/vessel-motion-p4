@@ -12,4 +12,4 @@ if(NOT DEFINED ENV{IDF_COMPONENT_CACHE_PATH})
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(vessel_motion_p4 VERSION 1.0.0)
+project(vessel_motion_p4 VERSION 1.0.1)

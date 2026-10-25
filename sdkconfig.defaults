@@ -34,6 +34,9 @@ CONFIG_HTTPD_MAX_URI_LEN=512
 CONFIG_HTTPD_MAX_URI_HANDLERS=24
 CONFIG_HTTPD_WS_SUPPORT=y
 
+# --- Sockets: httpd (7) + SNTP + DNS + OTA client + browser keep-alives ---
+CONFIG_LWIP_MAX_SOCKETS=16
+
 # --- SD card (SDIO 3.0, 4-wire) + FATFS ---
 CONFIG_SDMMC_ENABLE=y
 CONFIG_FATFS_LFN_HEAP=y
@@ -51,7 +54,7 @@ CONFIG_PARTITION_TABLE_FILENAME="partitions.csv"
 CONFIG_ESP_WIFI_ENABLED=y
 
 # --- OTA / app image ---
-CONFIG_APP_PROJECT_VER="0.1.7-p4"
+# App version comes from project(... VERSION) in CMakeLists.txt; release_ota.ps1 bumps it.
 
 # Ethernet (IP101GRI, RMII) is the primary network. Wi-Fi (ESP32-C6 via SDIO,
 # espressif/esp_hosted + espressif/esp_wifi_remote) is added in Phase 3.

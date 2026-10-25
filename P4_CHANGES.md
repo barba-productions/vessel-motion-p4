@@ -281,6 +281,19 @@ updated with every change session.
   pushes. OTA carries firmware only; web assets ship via `upload_web.ps1`.
 - Pi port note: none — this is P4-specific infrastructure.
 
+## 2026-10-25 — v1.0.1: fix OTA "could not download manifest" (socket exhaustion)
+
+- Symptom: OTA check failed with esp-tls "Failed to create socket" while SNTP
+  (UDP) worked. Root cause: `CONFIG_LWIP_MAX_SOCKETS=10` was too small — the
+  HTTP server holds up to 7 sockets (dashboard + keep-alives + WebSocket),
+  SNTP holds 1, so the OTA HTTPS client could not allocate a TCP socket.
+- Fix: `CONFIG_LWIP_MAX_SOCKETS=16` (sdkconfig + sdkconfig.defaults).
+- Also removed the stale `CONFIG_APP_PROJECT_VER="0.1.7-p4"` from
+  sdkconfig.defaults — the app version comes from `project(... VERSION)` in
+  CMakeLists.txt (proven: the device reported 1.0.0).
+- Released v1.0.1 to the OTA repo via `release_ota.ps1 -Version 1.0.1`
+  (first end-to-end run of the workflow).
+
 ### Notes for the Pi port
 - `storage.py DEFAULT_SETTINGS` needs: `resetOnTripStart: False`, `ntp: ""`.
 - `api.py`: `/api/storage` gains the `logs` object; `/api/trips` maximum 100;
