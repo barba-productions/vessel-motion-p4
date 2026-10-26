@@ -55,6 +55,7 @@ static bool json_get_int(const char *json, const char *key, long *out)
     if (!p) return false;
     p = strchr(p + strlen(pat), ':');
     if (!p) return false;
+    p++;  /* skip the colon itself */
     while (*p == ' ' || *p == '\t') p++;
     *out = strtol(p, NULL, 10);
     return true;
