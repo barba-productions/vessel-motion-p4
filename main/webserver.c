@@ -963,7 +963,7 @@ static esp_err_t index_get(httpd_req_t *req)
 
 /* ---- Pi-compatible template rendering (api.py render_shared_header) ---- */
 
-#define P4_VERSION "1.0.3"
+#define P4_VERSION "1.0.4"
 
 static char *read_text_file(const char *path)
 {
