@@ -310,6 +310,20 @@ updated with every change session.
   log shows exactly what was received. Then release 1.0.3 for the real
   update test.
 
+## 2026-10-25 — v1.0.3: OTA root cause found — json_get_int colon bug
+
+- Diagnostics paid off: the serial log showed a perfectly valid manifest with
+  `product='vessel-motion-p4'` but `schema=0`. Root cause: `json_get_int()`
+  in `main/ota.c` never skipped past the colon after the key, so `strtol()`
+  always read `": ..."` and returned 0 — every integer manifest field
+  (`schema`, `size`) parsed as 0, failing the `schema == 1` check. The product
+  string was never the problem (the earlier product chase was a red herring,
+  though it fixed the real TLS-cert, product-name and socket-limit issues).
+- Fix: one-line colon skip in `json_get_int`.
+- IMPORTANT: the manifest check runs on the RUNNING firmware, so the device
+  must be flashed to 1.0.3 over USB before OTA works; then publish 1.0.4
+  (`release_ota.ps1 -Version 1.0.4`) for the real 1.0.3 → 1.0.4 update test.
+
 ### Notes for the Pi port
 - `storage.py DEFAULT_SETTINGS` needs: `resetOnTripStart: False`, `ntp: ""`.
 - `api.py`: `/api/storage` gains the `logs` object; `/api/trips` maximum 100;
