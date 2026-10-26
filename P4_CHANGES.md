@@ -324,6 +324,16 @@ updated with every change session.
   must be flashed to 1.0.3 over USB before OTA works; then publish 1.0.4
   (`release_ota.ps1 -Version 1.0.4`) for the real 1.0.3 → 1.0.4 update test.
 
+## 2026-10-25 — v1.0.4: OTA test target
+
+- Device flashed to 1.0.3 over USB; serial log confirmed healthy boot
+  (version 1.0.3, settings-driven static IP applied, timezone loaded,
+  SD mounted 56.4 GB) and the fixed parser answering "installed version is
+  current" against the 1.0.3 manifest.
+- v1.0.4 built and published to the OTA repo as the 1.0.3 → 1.0.4 test target.
+  Note: raw.githubusercontent.com caches manifests for a few minutes — the
+  device may see the previous version briefly after a publish.
+
 ### Notes for the Pi port
 - `storage.py DEFAULT_SETTINGS` needs: `resetOnTripStart: False`, `ntp: ""`.
 - `api.py`: `/api/storage` gains the `logs` object; `/api/trips` maximum 100;
