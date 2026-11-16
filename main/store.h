@@ -5,7 +5,7 @@
  * formats as the Pi project (storage.py):
  *   trip sample  = 16 bytes  "<Ihhhhhh"  (elapsed_ms u32; roll*100, pitch*100,
  *                                        ax*1000, ay*1000, az*1000, res*1000 i16)
- *   100 trips retained, 8 h max duration, samples at 5 Hz.
+ *   Retention, duration and sampling rates are defined in globals.h.
  */
 #pragma once
 
@@ -70,6 +70,7 @@ void      store_active_trip_label(char *buf, size_t len);
 void      store_trip_live(trip_live_t *out);
 /* Read one trip's metadata by id (any state). Returns false if absent. */
 bool      store_trip_meta(uint32_t trip_id, trip_meta_t *out);
+char     *store_trip_filter_json(uint32_t trip_id); /* caller frees; NULL for legacy trips */
 
 /* --- data ingest (called from motion loop) --- */
 void store_add_sample(uint32_t elapsed_ms, float roll_deg, float pitch_deg,

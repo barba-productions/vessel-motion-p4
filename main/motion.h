@@ -11,13 +11,14 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "globals.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define MOTION_G0 9.80665f
-#define MOTION_WINDOW 200          /* 1 second at 200 Hz */
+#define MOTION_WINDOW SAMPLE_HZ    /* one second */
 #define IMPACT_RECENT_MAX 64
 #define RSI_HISTOGRAM_BINS 1000
 #define HEATMAP_CELLS 400          /* 20 x 20 */
@@ -66,6 +67,7 @@ typedef struct {
 
 /* Fill cfg with the exact defaults from the Pi AlgorithmConfig. */
 void motion_default_config(algorithm_cfg_t *cfg);
+float motion_vibration_cutoff(int strength, float normal_cutoff);
 
 /* --- math helpers --- */
 float clampf(float value, float low, float high);

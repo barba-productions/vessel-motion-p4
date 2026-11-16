@@ -31,12 +31,9 @@
 
 static const char *TAG = "vessel-motion";
 
-#define SAMPLE_HZ            200
-#define TELEMETRY_HZ         50
-#define MAX_TRIP_SECONDS     28800   /* 8 h */
-#define SEVERITY_DT          0.1f    /* 10 Hz RSI update */
-#define OVERVIEW_DT_US       2000000 /* overview sample every 2 s */
-#define CALIBRATION_SAMPLES  1000
+#define SEVERITY_DT          (1.0f / SEVERITY_HZ)
+#define OVERVIEW_DT_US       ((int64_t)(1000000 / OVERVIEW_SAMPLE_HZ))
+#define CALIBRATION_SAMPLES  (SAMPLE_HZ * CALIBRATION_SECONDS)
 
 static algorithm_cfg_t       s_cfg;
 static axis_map_t            s_axis_map;
@@ -110,6 +107,10 @@ static void apply_settings(void)
 
     s_cfg.complementary_alpha = (float)settings_num("alpha");
     s_cfg.fast_cutoff_hz      = (float)settings_num("fast");
+    if (settings_bool("vibrationEnabled")) {
+        s_cfg.fast_cutoff_hz = motion_vibration_cutoff(
+            (int)settings_num("vibrationStrength"), s_cfg.fast_cutoff_hz);
+    }
     s_cfg.slow_cutoff_hz      = (float)settings_num("slow");
     s_cfg.derivative_cutoff_hz = (float)settings_num("derivative");
     s_cfg.impact_start_g      = (float)settings_num("impactStart");
@@ -216,7 +217,10 @@ esp_err_t vessel_command(const char *cmd)
 {
     if (!cmd) return ESP_ERR_INVALID_ARG;
     if (!strcasecmp(cmd, "start")) {
-        store_start_trip(s_cfg.version);
+        if (!store_start_trip(s_cfg.version)) {
+            ESP_LOGE(TAG, "Trip could not be started");
+            return ESP_FAIL;
+        }
         if (settings_bool("resetOnTripStart")) {
             /* clear live charts/heatmap so the overview shows only trip data */
             s_reset_seq++;
@@ -227,7 +231,7 @@ esp_err_t vessel_command(const char *cmd)
     }
     if (!strcasecmp(cmd, "end")) {
         store_end_trip(&s_cfg);
-        return ESP_OK;
+        return store_trip_active() ? ESP_FAIL : ESP_OK;
     }
     if (!strcasecmp(cmd, "zero")) {
         orientation_filter_zero(&s_orient);
@@ -248,6 +252,7 @@ esp_err_t vessel_command(const char *cmd)
         return do_calibrate();
     }
     if (!strcasecmp(cmd, "defaults")) {
+        if (store_trip_active()) return ESP_ERR_INVALID_STATE;
         settings_restore_algorithm_defaults();
         apply_settings();
         return ESP_OK;
@@ -288,9 +293,9 @@ static void sensor_task(void *arg)
 
         /* dt, mirroring service.py (_sample) */
         int64_t t_us = sample.timestamp_us;
-        float dt = s_last_sample_us ? (t_us - s_last_sample_us) / 1e6f : 0.005f;
+        float dt = s_last_sample_us ? (t_us - s_last_sample_us) / 1e6f : 1.0f / SAMPLE_HZ;
         s_last_sample_us = t_us;
-        if (!(dt > 0.0f && dt <= 0.05f)) { s_missed++; dt = 0.005f; }
+        if (!(dt > 0.0f && dt <= 0.05f)) { s_missed++; dt = 1.0f / SAMPLE_HZ; }
         else { s_sample_hz = s_sample_hz * 0.99f + (1.0f / dt) * 0.01f; }
 
         orientation_t orientation = orientation_filter_update(&s_orient, sample.accel_vessel,
@@ -367,7 +372,7 @@ static void sensor_task(void *arg)
                                   motion.jerk_resultant / MOTION_G0,
                                   slow_eff);
             int64_t trip_elapsed = ms - store_active_trip_start_mono_ms();
-            if (t_us - last_trip_sample >= 1000000 / 5) {
+            if (t_us - last_trip_sample >= 1000000 / TRIP_SAMPLE_HZ) {
                 last_trip_sample = t_us;
                 uint32_t elapsed = (uint32_t)(trip_elapsed > 0 ? trip_elapsed : 0);
                 float roll_deg = orientation.display_roll * (180.0f / (float)M_PI);
@@ -473,6 +478,7 @@ static void sensor_task(void *arg)
 
 void app_main(void)
 {
+    wifi_enforce_policy();
     motion_default_config(&s_cfg);
     axis_map_init(&s_axis_map);
     orientation_filter_init(&s_orient);
@@ -498,12 +504,14 @@ void app_main(void)
      * claims host slot 0 and resets the C6, then mount the SD card on slot 1. */
     bool net_ok = (network_init() == ESP_OK);
     if (net_ok) {
-        esp_err_t wifi_err = vm_wifi_init();   /* brings up esp_hosted SDIO + C6 */
-        if (wifi_err == ESP_OK) {
-            wifi_monitor_start();
-        } else {
-            ESP_LOGW(TAG, "Wi-Fi init deferred/failed (%s); Ethernet continues",
-                     esp_err_to_name(wifi_err));
+        if (WIRELESS_ALLOWED) {
+            esp_err_t wifi_err = vm_wifi_init();
+            if (wifi_err == ESP_OK) {
+                wifi_monitor_start();
+            } else {
+                ESP_LOGW(TAG, "Wi-Fi init failed (%s); Ethernet continues",
+                         esp_err_to_name(wifi_err));
+            }
         }
         webserver_start();
         time_start_sntp();
@@ -511,7 +519,7 @@ void app_main(void)
         ESP_LOGW(TAG, "Network init failed; running headless (UART telemetry only)");
     }
 
-    vTaskDelay(pdMS_TO_TICKS(1000));  /* let the C6 SDIO fully settle before SD mount */
+    if (WIRELESS_ALLOWED) vTaskDelay(pdMS_TO_TICKS(1000));
     storage_mount_web();            /* dashboard assets: internal flash (reliable) */
     storage_mount_sd();             /* trip/impact logs: SD card */
     store_init();

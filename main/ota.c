@@ -1,5 +1,6 @@
 /* OTA update — see ota.h. ESP-IDF native OTA + manifest/SHA-256 validation. */
 #include "ota.h"
+#include "globals.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -13,10 +14,13 @@
 #include "freertos/task.h"
 
 static const char *TAG = "ota";
-#define OTA_PRODUCT "vessel-motion-p4"
+#define OTA_PRODUCT FIRMWARE_PRODUCT
 #define OTA_ARCH    "esp32p4"
 
-static ota_status_t s_status;
+static ota_status_t s_status = {
+    .state = "idle",
+    .message = "Ready to check for updates",
+};
 static bool s_running;
 
 static void set_status(const char *state, const char *msg)
@@ -214,6 +218,8 @@ esp_err_t ota_start(const char *manifest_url)
 void ota_snapshot(ota_status_t *out)
 {
     *out = s_status;
+    const esp_app_desc_t *cur = esp_app_get_description();
+    strlcpy(out->current_version, cur->version, sizeof(out->current_version));
 }
 
 bool ota_running(void)

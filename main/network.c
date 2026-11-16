@@ -17,9 +17,7 @@ static const char *TAG = "network";
 
 /* Static IP for the direct LAN link to the laptop (no DHCP server present).
  * Matches the laptop's 192.168.11.177/24. */
-#define ETH_STATIC_IP       "192.168.11.222"
-#define ETH_STATIC_NETMASK  "255.255.255.0"
-#define ETH_STATIC_GW       "0.0.0.0"
+#include "globals.h"
 
 /* Waveshare ESP32-P4-NANO IP101GRI RMII pin map.
  * RXD0/RXD1 must be valid P4 EMAC iomux pins (RXD0: 29/46/52, RXD1: 30/47/53). */
@@ -88,10 +86,10 @@ esp_err_t network_init(void)
             esp_netif_str_to_ip4(settings_str("subnet"), &ip_info.netmask) != ESP_OK ||
             esp_netif_str_to_ip4(settings_str("gateway"), &ip_info.gw) != ESP_OK) {
             /* never lose the link over a bad setting: fall back to the known-good address */
-            ESP_LOGW(TAG, "Invalid static IPv4 settings; falling back to %s", ETH_STATIC_IP);
-            esp_netif_str_to_ip4(ETH_STATIC_IP, &ip_info.ip);
-            esp_netif_str_to_ip4(ETH_STATIC_NETMASK, &ip_info.netmask);
-            esp_netif_str_to_ip4(ETH_STATIC_GW, &ip_info.gw);
+            ESP_LOGW(TAG, "Invalid static IPv4 settings; falling back to %s", DEFAULT_IP_ADDRESS);
+            ESP_ERROR_CHECK(esp_netif_str_to_ip4(DEFAULT_IP_ADDRESS, &ip_info.ip));
+            ESP_ERROR_CHECK(esp_netif_str_to_ip4(DEFAULT_SUBNET_MASK, &ip_info.netmask));
+            ESP_ERROR_CHECK(esp_netif_str_to_ip4(DEFAULT_GATEWAY, &ip_info.gw));
         }
         ESP_ERROR_CHECK(esp_netif_set_ip_info(s_netif, &ip_info));
         s_ip = ip_info.ip;
@@ -99,6 +97,11 @@ esp_err_t network_init(void)
         if (esp_netif_str_to_ip4(settings_str("dns"), &dns.ip.u_addr.ip4) == ESP_OK) {
             dns.ip.type = ESP_IPADDR_TYPE_V4;
             esp_netif_set_dns_info(s_netif, ESP_NETIF_DNS_MAIN, &dns);
+        } else {
+            ESP_LOGW(TAG, "Invalid DNS setting; using firmware default");
+            ESP_ERROR_CHECK(esp_netif_str_to_ip4(DEFAULT_DNS_SERVER, &dns.ip.u_addr.ip4));
+            dns.ip.type = ESP_IPADDR_TYPE_V4;
+            ESP_ERROR_CHECK(esp_netif_set_dns_info(s_netif, ESP_NETIF_DNS_MAIN, &dns));
         }
         ESP_LOGI(TAG, "Ethernet static IP: " IPSTR, IP2STR(&ip_info.ip));
     }

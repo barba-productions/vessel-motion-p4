@@ -63,6 +63,16 @@
   white-space: nowrap;
 }
 
+.topbar .vessel-name[hidden] {
+  display: none;
+}
+
+html[data-wireless="disabled"] [data-tab="wifi"],
+html[data-wireless="disabled"] [data-panel="wifi"],
+html[data-wireless="disabled"] .network-note {
+  display: none;
+}
+
 .topbar .header-meta .connection {
   flex: 0 0 auto;
 }

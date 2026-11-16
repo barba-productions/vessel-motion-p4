@@ -32,38 +32,45 @@ vec3_t vec3_sub(vec3_t a, vec3_t b)
 void motion_default_config(algorithm_cfg_t *cfg)
 {
     *cfg = (algorithm_cfg_t) {
-        .version = 1,
-        .complementary_alpha = 0.98f,
-        .fast_cutoff_hz = 25.0f,
-        .slow_cutoff_hz = 4.0f,
-        .derivative_cutoff_hz = 12.0f,
-        .peak = { 0.10f, 1.50f, 2.0f },
-        .rms = { 0.03f, 0.50f, 2.0f },
-        .jerk = { 0.5f, 15.0f, 2.0f },
-        .roll_rate = { 2.0f, 25.0f, 2.0f },
-        .pitch_rate = { 2.0f, 25.0f, 2.0f },
-        .repeat = { 1.0f, 20.0f, 2.0f },
-        .rsi_weights = { 0.35f, 0.25f, 0.20f, 0.10f, 0.10f },
-        .rsi_attack_seconds = 0.20f,
-        .rsi_decay_seconds = 5.0f,
-        .impact_start_g = 0.25f,
-        .impact_end_g = 0.15f,
-        .impact_end_ms = 100,
-        .impact_deadband_ms = 150,
-        .impact_accel = { 0.25f, 1.50f, 2.0f },
-        .impact_jerk = { 1.0f, 15.0f, 2.0f },
-        .trip_rsi_weights = { 0.40f, 0.35f, 0.15f, 0.10f },
-        .trip_impact_per_hour = { 1.0f, 20.0f, 2.0f },
-        .mei_axis_weights = { 1.0f, 1.0f, 1.0f },
-        .mei_rms = { 0.02f, 0.30f, 2.0f },
-        .mei_shock = { 0.03f, 0.50f, 2.0f },
-        .mei_duration_tau_hours = 4.0f,
-        .mei_current_weights = { 0.45f, 0.35f, 0.20f },
-        .mei_trip_weights = { 0.40f, 0.40f, 0.20f },
-        .idle_accel_rms_g = 0.015f,
-        .idle_rate_deg_s = 0.5f,
-        .idle_seconds = 30.0f,
+        .version = ALGORITHM_VERSION,
+        .complementary_alpha = DEFAULT_ALPHA,
+        .fast_cutoff_hz = DEFAULT_FAST_HZ,
+        .slow_cutoff_hz = DEFAULT_SLOW_HZ,
+        .derivative_cutoff_hz = DEFAULT_DERIVATIVE_HZ,
+        .peak = { DEFAULT_PEAK_LOW, DEFAULT_PEAK_HIGH, DEFAULT_EXPONENT },
+        .rms = { DEFAULT_RMS_LOW, DEFAULT_RMS_HIGH, DEFAULT_EXPONENT },
+        .jerk = { DEFAULT_JERK_LOW, DEFAULT_JERK_HIGH, DEFAULT_EXPONENT },
+        .roll_rate = { DEFAULT_ROLL_LOW, DEFAULT_ROLL_HIGH, DEFAULT_EXPONENT },
+        .pitch_rate = { DEFAULT_PITCH_LOW, DEFAULT_PITCH_HIGH, DEFAULT_EXPONENT },
+        .repeat = { DEFAULT_REPEAT_LOW, DEFAULT_REPEAT_HIGH, DEFAULT_EXPONENT },
+        .rsi_weights = DEFAULT_RSI_WEIGHTS,
+        .rsi_attack_seconds = DEFAULT_ATTACK_SECONDS,
+        .rsi_decay_seconds = DEFAULT_DECAY_SECONDS,
+        .impact_start_g = DEFAULT_IMPACT_START_G,
+        .impact_end_g = DEFAULT_IMPACT_END_G,
+        .impact_end_ms = DEFAULT_IMPACT_END_MS,
+        .impact_deadband_ms = DEFAULT_IMPACT_DEADBAND_MS,
+        .impact_accel = { DEFAULT_IMPACT_LOW, DEFAULT_IMPACT_HIGH, DEFAULT_EXPONENT },
+        .impact_jerk = DEFAULT_IMPACT_JERK_RANGE,
+        .trip_rsi_weights = DEFAULT_TRIP_RSI_WEIGHTS,
+        .trip_impact_per_hour = DEFAULT_TRIP_IMPACT_RANGE,
+        .mei_axis_weights = DEFAULT_MEI_AXIS,
+        .mei_rms = { DEFAULT_MEI_RMS_LOW, DEFAULT_MEI_RMS_HIGH, DEFAULT_EXPONENT },
+        .mei_shock = { DEFAULT_MEI_SHOCK_LOW, DEFAULT_MEI_SHOCK_HIGH, DEFAULT_EXPONENT },
+        .mei_duration_tau_hours = DEFAULT_MEI_TAU_HOURS,
+        .mei_current_weights = DEFAULT_MEI_CURRENT_WEIGHTS,
+        .mei_trip_weights = DEFAULT_MEI_TRIP_WEIGHTS,
+        .idle_accel_rms_g = DEFAULT_IDLE_RMS_G,
+        .idle_rate_deg_s = DEFAULT_IDLE_RATE_DEG_S,
+        .idle_seconds = DEFAULT_IDLE_SECONDS,
     };
+}
+
+float motion_vibration_cutoff(int strength, float normal_cutoff)
+{
+    static const float cutoffs[] = VIBRATION_CUTOFFS_HZ;
+    if (strength < 1 || strength > 5) return normal_cutoff;
+    return fminf(normal_cutoff, cutoffs[strength - 1]);
 }
 
 /* --- axis mapping --- */

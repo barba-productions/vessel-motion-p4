@@ -6,12 +6,16 @@
 #include "esp_log.h"
 #include "esp_event.h"
 #include "esp_netif.h"
+#if WIRELESS_ALLOWED
 #include "esp_wifi.h"
+#include "settings.h"
+#endif
 #include "lwip/ip4_addr.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 
 static const char *TAG = "wifi";
 
@@ -21,12 +25,29 @@ static const char *TAG = "wifi";
 #define MAX_SCAN      24
 #define MONITOR_MS    5000
 
+void wifi_enforce_policy(void)
+{
+    if (WIRELESS_ALLOWED) return;
+    ESP_ERROR_CHECK(gpio_set_level(WIRELESS_RESET_GPIO, WIRELESS_RESET_LEVEL));
+    ESP_ERROR_CHECK(gpio_set_direction(WIRELESS_RESET_GPIO, GPIO_MODE_OUTPUT));
+    ESP_LOGW(TAG, "Wireless forbidden by firmware; C6 held in reset (GPIO%d)",
+             WIRELESS_RESET_GPIO);
+}
+
+#if WIRELESS_ALLOWED
 static esp_netif_t *s_sta_netif;
 static esp_netif_t *s_ap_netif;
 static bool s_connected;
 static bool s_fallback_active;
 static esp_ip4_addr_t s_sta_ip;
 static char s_saved_ssid[33];
+
+static void ensure_sta_netif(void)
+{
+    if (s_sta_netif) return;
+    s_sta_netif = esp_netif_create_default_wifi_sta();
+    ESP_ERROR_CHECK(esp_netif_set_hostname(s_sta_netif, settings_str("hostname")));
+}
 
 static void save_credentials(const char *ssid, const char *pass)
 {
@@ -53,6 +74,7 @@ static bool load_credentials(char *ssid, size_t ssid_len, char *pass, size_t pas
 
 static void start_fallback_ap(void)
 {
+    if (!WIRELESS_ALLOWED) return;
     if (s_fallback_active) return;
     wifi_config_t ap = { 0 };
     strlcpy((char *)ap.ap.ssid, WIFI_FALLBACK_SSID, sizeof(ap.ap.ssid));
@@ -109,13 +131,18 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
 
 esp_err_t vm_wifi_init(void)
 {
+    if (!WIRELESS_ALLOWED) {
+        wifi_enforce_policy();
+        return ESP_ERR_NOT_SUPPORTED;
+    }
     s_ap_netif = esp_netif_create_default_wifi_ap();
+    ESP_ERROR_CHECK(esp_netif_set_hostname(s_ap_netif, settings_str("hostname")));
 
     /* Fallback AP address 192.168.4.1 */
     esp_netif_ip_info_t ap_ip = { 0 };
-    IP4_ADDR(&ap_ip.ip, 192, 168, 4, 1);
-    IP4_ADDR(&ap_ip.gw, 192, 168, 4, 1);
-    IP4_ADDR(&ap_ip.netmask, 255, 255, 255, 0);
+    ESP_ERROR_CHECK(esp_netif_str_to_ip4(WIFI_FALLBACK_IP, &ap_ip.ip));
+    ESP_ERROR_CHECK(esp_netif_str_to_ip4(WIFI_FALLBACK_IP, &ap_ip.gw));
+    ESP_ERROR_CHECK(esp_netif_str_to_ip4(WIFI_FALLBACK_NETMASK, &ap_ip.netmask));
     esp_netif_dhcps_stop(s_ap_netif);
     esp_netif_set_ip_info(s_ap_netif, &ap_ip);
     esp_netif_dhcps_start(s_ap_netif);
@@ -137,7 +164,7 @@ esp_err_t vm_wifi_init(void)
     /* Try saved credentials, else fallback AP */
     char ssid[33] = { 0 }, pass[65] = { 0 };
     if (load_credentials(ssid, sizeof(ssid), pass, sizeof(pass))) {
-        s_sta_netif = esp_netif_create_default_wifi_sta();
+        ensure_sta_netif();
         strlcpy(s_saved_ssid, ssid, sizeof(s_saved_ssid));
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
         ESP_ERROR_CHECK(esp_wifi_start());
@@ -161,10 +188,14 @@ esp_err_t wifi_sta_ip(char *buf, size_t len)
 
 int wifi_scan(wifi_network_t *out, int max)
 {
+    if (!WIRELESS_ALLOWED) {
+        ESP_LOGW(TAG, "Scan blocked by wireless policy");
+        return -1;
+    }
     /* Scanning requires the STA interface. When no credentials are saved the
      * board runs the fallback AP only (WIFI_MODE_AP), which cannot scan —
      * create the STA netif and switch to APSTA first (AP stays up). */
-    if (!s_sta_netif) s_sta_netif = esp_netif_create_default_wifi_sta();
+    ensure_sta_netif();
     wifi_mode_t mode = WIFI_MODE_NULL;
     if (esp_wifi_get_mode(&mode) != ESP_OK) mode = WIFI_MODE_NULL;
     if (mode != WIFI_MODE_STA && mode != WIFI_MODE_APSTA) {
@@ -202,8 +233,9 @@ int wifi_scan(wifi_network_t *out, int max)
 
 esp_err_t vm_wifi_connect(const char *ssid, const char *password)
 {
+    if (!WIRELESS_ALLOWED) return ESP_ERR_NOT_SUPPORTED;
     if (!ssid || !ssid[0] || strlen(ssid) > 32) return ESP_ERR_INVALID_ARG;
-    if (!s_sta_netif) s_sta_netif = esp_netif_create_default_wifi_sta();
+    ensure_sta_netif();
     /* Leaving fallback AP: stop before switching to STA mode. */
     if (s_fallback_active) {
         esp_wifi_stop();
@@ -226,11 +258,13 @@ esp_err_t vm_wifi_connect(const char *ssid, const char *password)
 
 esp_err_t vm_wifi_disconnect(void)
 {
+    if (!WIRELESS_ALLOWED) return ESP_ERR_NOT_SUPPORTED;
     return esp_wifi_disconnect();
 }
 
 esp_err_t wifi_forget(void)
 {
+    if (!WIRELESS_ALLOWED) return ESP_ERR_NOT_SUPPORTED;
     nvs_handle_t h;
     if (nvs_open(NVS_NS, NVS_READWRITE, &h) == ESP_OK) {
         nvs_erase_key(h, NVS_KEY_SSID);
@@ -254,5 +288,22 @@ static void monitor_task(void *arg)
 
 void wifi_monitor_start(void)
 {
+    if (!WIRELESS_ALLOWED) return;
     xTaskCreate(monitor_task, "wifi-mon", 3072, NULL, 3, NULL);
 }
+
+#else
+esp_err_t vm_wifi_init(void) { wifi_enforce_policy(); return ESP_ERR_NOT_SUPPORTED; }
+bool wifi_is_connected(void) { return false; }
+bool wifi_is_fallback_active(void) { return false; }
+esp_err_t wifi_sta_ip(char *buf, size_t len) { return ESP_ERR_INVALID_STATE; }
+int wifi_scan(wifi_network_t *out, int max)
+{
+    ESP_LOGW(TAG, "Scan blocked by wireless policy");
+    return -1;
+}
+esp_err_t vm_wifi_connect(const char *ssid, const char *password) { return ESP_ERR_NOT_SUPPORTED; }
+esp_err_t vm_wifi_disconnect(void) { return ESP_ERR_NOT_SUPPORTED; }
+esp_err_t wifi_forget(void) { return ESP_ERR_NOT_SUPPORTED; }
+void wifi_monitor_start(void) {}
+#endif

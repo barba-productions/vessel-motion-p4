@@ -28,7 +28,7 @@ static const char *TAG = "mpu6050";
 #define ACCEL_SCALE         (MOTION_G0 / 16384.0f)
 #define GYRO_SCALE          ((float)M_PI / (65.5f * 180.0f))
 
-#define FROZEN_LIMIT        400      /* 2 s at 200 Hz */
+#define FROZEN_LIMIT        (2 * SAMPLE_HZ)
 #define OVERRANGE_G         2.1f
 
 static i2c_master_bus_handle_t s_bus;
@@ -99,7 +99,7 @@ esp_err_t sensor_init(const axis_map_t *axis_map, vec3_t accel_offset, vec3_t gy
 
     /* Init sequence: identical to Pi ((0x19,0),(0x1A,0),(0x1B,8),(0x1C,0),(0x6B,1)) */
     const uint8_t init[][2] = {
-        { REG_SMPLRT_DIV, 0 }, { REG_CONFIG, 0 }, { REG_GYRO_CONFIG, 0x08 },
+        { REG_SMPLRT_DIV, SENSOR_SAMPLE_DIVIDER }, { REG_CONFIG, SENSOR_DLPF_CONFIG }, { REG_GYRO_CONFIG, 0x08 },
         { REG_ACCEL_CONFIG, 0 }, { REG_PWR_MGMT_1, 1 },
     };
     for (size_t i = 0; i < sizeof(init) / sizeof(init[0]); i++) {

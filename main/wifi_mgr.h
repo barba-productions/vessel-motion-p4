@@ -9,14 +9,13 @@
 
 #include <stdbool.h>
 #include "esp_err.h"
+#include "globals.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define WIFI_FALLBACK_SSID "Vessel-Motion"
-#define WIFI_FALLBACK_PASS "vessel-motion"
-#define WIFI_FALLBACK_IP   "192.168.4.1"
+void wifi_enforce_policy(void);
 
 typedef struct {
     char ssid[33];

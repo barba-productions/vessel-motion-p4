@@ -1,5 +1,6 @@
 /* Rolling overview history — see overview.h. */
 #include "overview.h"
+#include "globals.h"
 #include <string.h>
 #include "esp_timer.h"
 
@@ -35,7 +36,7 @@ static void compact(uint32_t now_ms)
     for (int i = 0; i < s_count; i++) {
         uint32_t age = now_ms - s_samples[i].ms;
         if (age > TWELVE_H_MS) continue;
-        uint32_t spacing = age <= 10u * 60 * 1000 ? 2000 :
+        uint32_t spacing = age <= 10u * 60 * 1000 ? (uint32_t)(1000 / OVERVIEW_SAMPLE_HZ) :
                            age <= 60u * 60 * 1000 ? 6000 :
                            age <= 6u * 3600 * 1000 ? 30000 : 60000;
         if (kept == 0 || s_samples[i].ms - last_kept >= spacing || i == s_count - 1) {

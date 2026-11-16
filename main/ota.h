@@ -27,7 +27,7 @@ typedef struct {
 /* Start an update check+download in the background (user-initiated). */
 esp_err_t ota_start(const char *manifest_url);
 
-/* Snapshot the current update status. */
+/* Snapshot update status and the running image version, even before ota_start. */
 void ota_snapshot(ota_status_t *out);
 
 /* True while an update is in progress. */

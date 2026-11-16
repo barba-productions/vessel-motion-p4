@@ -31,9 +31,19 @@
   }
 
   function installFallbackStatus(panels) {
+    if (!window.vmUiSettings || window.vmUiSettings.wirelessAllowed !== true) return;
     var note = document.querySelector(".network-note");
     var wifiGrid = panels.querySelector('[data-panel="wifi"] .panel-grid');
     if (!note || !wifiGrid) return;
+    note.textContent = "";
+    [["Access point: ", window.vmUiSettings.fallbackSsid],
+     [" Password: ", window.vmUiSettings.fallbackPassword],
+     [" Address: ", "http://" + window.vmUiSettings.fallbackIp]].forEach(function (entry) {
+      note.appendChild(document.createTextNode(entry[0]));
+      var value = document.createElement("b");
+      value.textContent = entry[1];
+      note.appendChild(value);
+    });
     var card = note.closest(".settings-card");
     var status = document.createElement("span");
     var heading = document.createElement("h2");
@@ -88,6 +98,10 @@
     motionPanel.querySelector(".panel-grid").prepend(axisCard, calibrationCard);
     [vesselCard, axisCard, calibrationCard, motionPanel].forEach(enableCard);
     installFallbackStatus(panels);
+    if (!window.vmUiSettings || window.vmUiSettings.wirelessAllowed !== true) {
+      panels.querySelectorAll('[data-panel="wifi"],.network-note').forEach(function (node) { node.remove(); });
+      tabs.querySelectorAll('[data-tab="wifi"]').forEach(function (node) { node.remove(); });
+    }
 
     var modelSelect = panels.elements.vesselModel;
     var originalOption = modelSelect.querySelector('option[value="original"]');
@@ -425,6 +439,7 @@
     var panels = document.querySelector(".settings-form");
     if (!tabs || !panels || tabs.querySelector('[data-tab="time"]')) return;
     organizeSettings(tabs, panels);
+    installMeasurementControls();
 
     var timeTab = document.createElement("button");
     timeTab.type = "button";
@@ -586,7 +601,160 @@
     try { storedTab = sessionStorage.getItem("vmSettingsTab"); } catch (e) {}
     var startTab = requestedTab || storedTab || "vessel";
     if (tabs.querySelector('[data-tab="' + startTab + '"]')) activate(startTab);
+    else activate("vessel");
     if (startTab === "help") requestAnimationFrame(function () { requestAnimationFrame(redrawHelp); });
+  }
+
+  function installImpactControls(form) {
+    var mode = document.getElementById("impactThresholdMode");
+    var slider = document.getElementById("impactThresholdLevel");
+    var field = document.getElementById("impactThresholdLevelField");
+    var customField = document.getElementById("impactCustomField");
+    var effective = document.getElementById("impactThresholdEffective");
+    var status = document.getElementById("impactThresholdStatus");
+    var start = form.elements.impactStart;
+    var end = form.elements.impactEnd;
+    var levels = null;
+    var tripActive = true;
+    var labels = ["Very low", "Low", "Standard", "High", "Very high"];
+    function format(value) { return Number(Number(value).toPrecision(6)); }
+    function matchingLevel() {
+      return levels.findIndex(function (level) {
+        return Math.abs(level.startG - Number(start.value)) < 0.000001 &&
+          Math.abs(level.endG - Number(end.value)) < 0.000001;
+      });
+    }
+    function sync() {
+      var custom = mode.value === "custom";
+      mode.disabled = !levels || tripActive;
+      slider.disabled = !levels || tripActive || custom;
+      start.disabled = end.disabled = !levels || tripActive || !custom;
+      field.classList.toggle("disabled", slider.disabled);
+      customField.classList.toggle("disabled", start.disabled);
+      if (!levels) {
+        effective.textContent = "Impact preset configuration unavailable. Reload settings before editing.";
+        return;
+      }
+      var valid = Number.isFinite(Number(start.value)) && Number.isFinite(Number(end.value)) &&
+        Number(start.value) > Number(end.value) && Number(end.value) > 0;
+      end.setCustomValidity(valid ? "" : "Both thresholds must be positive, with end below start.");
+      effective.textContent = (custom ? "Custom" : "Level " + slider.value + " of 5 - " + labels[Number(slider.value) - 1]) +
+        " - start: " + format(start.value) + " g / end: " + format(end.value) + " g";
+      slider.setAttribute("aria-valuetext", effective.textContent);
+    }
+    function applyPreset() {
+      if (!levels || tripActive || mode.value !== "preset") return;
+      var level = levels[Number(slider.value) - 1];
+      start.value = level.startG;
+      end.value = level.endG;
+      sync();
+    }
+    mode.addEventListener("change", function () {
+      if (mode.value === "custom") {
+        customField.closest("details").open = true;
+        sync();
+      } else applyPreset();
+    });
+    slider.addEventListener("input", applyPreset);
+    [start, end].forEach(function (control) { control.addEventListener("input", sync); });
+    form.addEventListener("formdata", function (event) {
+      if (!levels || tripActive) {
+        event.formData.delete("impactStart");
+        event.formData.delete("impactEnd");
+      } else {
+        event.formData.set("impactStart", start.value);
+        event.formData.set("impactEnd", end.value);
+      }
+    });
+    sync();
+    return {
+      loaded: function (settings) {
+        levels = settings.impactThresholdLevels;
+        if (!Array.isArray(levels) || levels.length !== 5 || !levels.every(function (level) {
+          return Number.isFinite(level.startG) && Number.isFinite(level.endG) &&
+            level.startG > level.endG && level.endG > 0;
+        })) {
+          levels = null;
+          status.textContent = "Invalid or missing firmware impact presets. Reload after updating the firmware.";
+          sync();
+          return;
+        }
+        start.value = settings.impactStart;
+        end.value = settings.impactEnd;
+        var index = matchingLevel();
+        mode.value = index < 0 ? "custom" : "preset";
+        if (index >= 0) slider.value = index + 1;
+        sync();
+      },
+      setTripActive: function (active) {
+        tripActive = active;
+        status.textContent = active ? "Trip active: impact thresholds are locked." : "";
+        sync();
+      },
+      tripError: function (error) {
+        tripActive = true;
+        status.textContent = error.message + ". Impact controls are locked until trip status is available.";
+        sync();
+      }
+    };
+  }
+
+  function installMeasurementControls() {
+    var form = document.querySelector(".settings-form");
+    var impacts = installImpactControls(form);
+    var enabled = form.elements.vibrationEnabled;
+    var strength = form.elements.vibrationStrength;
+    var field = document.getElementById("vibrationStrengthField");
+    var effective = document.getElementById("vibrationEffective");
+    var status = document.getElementById("vibrationStatus");
+    var normal = form.elements.fast;
+    var cutoffs = null;
+    var tripActive = false;
+    function sync() {
+      var on = enabled.value === "yes";
+      strength.disabled = !on || tripActive;
+      field.classList.toggle("disabled", strength.disabled);
+      if (!cutoffs) { effective.textContent = "Loading filter configuration..."; return; }
+      effective.textContent = "Strength " + strength.value + " of 5 - effective fast cutoff: " +
+        (on ? Math.min(Number(normal.value), cutoffs[Number(strength.value) - 1]) : normal.value) + " Hz";
+    }
+    [enabled, strength, normal].forEach(function (control) { control.addEventListener("input", sync); });
+    form.addEventListener("formdata", function (event) {
+      event.formData.set("vibrationStrength", strength.value);
+    });
+    function loaded(settings) {
+      impacts.loaded(settings);
+      cutoffs = settings.vibrationCutoffsHz;
+      enabled.value = settings.vibrationEnabled ? "yes" : "no";
+      strength.value = settings.vibrationStrength;
+      var note = document.getElementById("tripRetentionNote");
+      if (note) note.textContent = "Up to " + settings.maximumTrips +
+        " completed trips are kept. Trips automatically finish after " +
+        (settings.maximumTripSeconds / 3600) + " hours. Oldest completed trips are removed first.";
+      sync();
+    }
+    document.addEventListener("vmSettingsLoaded", function (event) { loaded(event.detail); });
+    if (window.vmLoadedSettings) loaded(window.vmLoadedSettings);
+    function refreshTrip() {
+      fetch("/api/telemetry", {cache: "no-store"}).then(function (response) {
+        if (!response.ok) throw new Error("Trip status unavailable");
+        return response.json();
+      }).then(function (data) {
+        tripActive = !!data.trip;
+        impacts.setTripActive(tripActive);
+        [enabled, normal, form.elements.slow, form.elements.derivative].forEach(function (control) {
+          control.disabled = tripActive;
+        });
+        status.textContent = tripActive ? "Trip active: measurement filters are locked." : "";
+        sync();
+      }).catch(function (error) {
+        status.textContent = error.message + ". Firmware still enforces trip locking.";
+        impacts.tripError(error);
+      });
+    }
+    sync();
+    refreshTrip();
+    setInterval(function () { if (!document.hidden) refreshTrip(); }, 5000);
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", install);

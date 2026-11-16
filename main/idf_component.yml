@@ -4,8 +4,12 @@
 dependencies:
   espressif/esp_wifi_remote:
     version: "0.14.*"
+    rules:
+      - if: "${VESSEL_WIRELESS_ALLOWED} == 1"
   espressif/esp_hosted:
     version: "1.4.*"
+    rules:
+      - if: "${VESSEL_WIRELESS_ALLOWED} == 1"
   joltwallet/littlefs:
     version: "1.*"
   idf:

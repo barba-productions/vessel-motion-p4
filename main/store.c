@@ -15,15 +15,14 @@
 #include "nvs_flash.h"
 #include "nvs.h"
 #include "motion.h"   /* normalizef */
+#include "settings.h"
+#include <errno.h>
 
 static const char *TAG = "store";
 
 #define STORE_DIR        SD_MOUNT_POINT "/vessel"
 #define TRIPS_DIR        STORE_DIR "/trips"
 #define IMPACTS_FILE     STORE_DIR "/impacts.bin"
-#define TRIP_RETENTION   100
-#define TRIP_SAMPLE_HZ   5
-#define MAX_TRIP_SECONDS 28800
 #define HEATMAP_CELLS    400
 
 /* On-disk trip header (fixed-size binary metadata per trip). */
@@ -110,15 +109,23 @@ static void trip_path(uint32_t id, char *buf, size_t len)
     snprintf(buf, len, TRIPS_DIR "/trip_%03lu.bin", (unsigned long)id);
 }
 
-static void write_trip_file(const trip_file_t *t)
+static esp_err_t write_trip_file(const trip_file_t *t)
 {
     /* header metadata lives in a sidecar .meta file; samples live in .bin */
     char mpath[64];
     make_meta_path(t->id, mpath, sizeof(mpath));
     FILE *f = fopen(mpath, "wb");
-    if (!f) return;
-    fwrite(t, sizeof(*t), 1, f);
-    fclose(f);
+    if (!f) {
+        ESP_LOGE(TAG, "Cannot write trip metadata %s: %s", mpath, strerror(errno));
+        return ESP_FAIL;
+    }
+    bool written = fwrite(t, sizeof(*t), 1, f) == 1;
+    int closed = fclose(f);
+    if (!written || closed) {
+        ESP_LOGE(TAG, "Trip metadata write failed: %s", mpath);
+        return ESP_FAIL;
+    }
+    return ESP_OK;
 }
 
 static bool read_trip_file(uint32_t id, trip_file_t *t)
@@ -133,18 +140,82 @@ static bool read_trip_file(uint32_t id, trip_file_t *t)
 }
 
 /* Collect the trip ids present on SD (files trip_<id>.meta), unsorted. */
-static int scan_trip_ids(uint32_t *ids, int max_ids)
+static int scan_trip_ids(uint32_t **out)
 {
+    *out = NULL;
     DIR *d = opendir(TRIPS_DIR);
-    if (!d) return 0;
-    int n = 0;
+    if (!d) {
+        ESP_LOGE(TAG, "Cannot scan trip directory: %s", strerror(errno));
+        return -1;
+    }
+    int n = 0, capacity = 0;
+    uint32_t *ids = NULL;
     struct dirent *e;
-    while (n < max_ids && (e = readdir(d)) != NULL) {
+    while ((e = readdir(d)) != NULL) {
         unsigned long id;
-        if (sscanf(e->d_name, "trip_%lu.meta", &id) == 1) ids[n++] = (uint32_t)id;
+        int consumed = 0;
+        if (sscanf(e->d_name, "trip_%lu.meta%n", &id, &consumed) != 1 ||
+            !consumed || e->d_name[consumed]) continue;
+        if (n == capacity) {
+            int next = capacity ? capacity * 2 : 32;
+            uint32_t *grown = realloc(ids, next * sizeof(*ids));
+            if (!grown) {
+                ESP_LOGE(TAG, "Out of memory scanning trips");
+                free(ids); closedir(d);
+                return -1;
+            }
+            ids = grown;
+            capacity = next;
+        }
+        ids[n++] = (uint32_t)id;
     }
     closedir(d);
+    *out = ids;
     return n;
+}
+
+static int compare_ids(const void *a, const void *b)
+{
+    uint32_t aa = *(const uint32_t *)a, bb = *(const uint32_t *)b;
+    return (aa > bb) - (aa < bb);
+}
+
+static esp_err_t prune_trips(void)
+{
+    uint32_t *ids;
+    int count = scan_trip_ids(&ids);
+    if (count < 0) return ESP_FAIL;
+    if (count > 1) qsort(ids, count, sizeof(*ids), compare_ids);
+    int completed = 0;
+    for (int i = 0; i < count; i++) {
+        trip_file_t t;
+        if (read_trip_file(ids[i], &t) && t.completed) completed++;
+    }
+    esp_err_t result = ESP_OK;
+    for (int i = 0; i < count && completed > TRIP_RETENTION; i++) {
+        trip_file_t t;
+        if (ids[i] == s_active_id || !read_trip_file(ids[i], &t) || !t.completed) continue;
+        char p[96];
+        trip_path(ids[i], p, sizeof(p));
+        if (remove(p) && errno != ENOENT) {
+            ESP_LOGE(TAG, "Retention cannot remove %s: %s", p, strerror(errno));
+            result = ESP_FAIL; continue;
+        }
+        snprintf(p, sizeof(p), TRIPS_DIR "/trip_%03lu.filter.json", (unsigned long)ids[i]);
+        if (remove(p) && errno != ENOENT) {
+            ESP_LOGE(TAG, "Retention cannot remove %s: %s", p, strerror(errno));
+            result = ESP_FAIL; continue;
+        }
+        make_meta_path(ids[i], p, sizeof(p));
+        if (remove(p)) {
+            ESP_LOGE(TAG, "Retention cannot remove %s: %s", p, strerror(errno));
+            result = ESP_FAIL; continue;
+        }
+        completed--;
+        ESP_LOGI(TAG, "Retention: deleted oldest trip %lu", (unsigned long)ids[i]);
+    }
+    free(ids);
+    return result;
 }
 
 esp_err_t store_init(void)
@@ -169,7 +240,7 @@ esp_err_t store_init(void)
         fclose(f);
     }
     ESP_LOGI(TAG, "Store ready on SD (%s)", STORE_DIR);
-    return ESP_OK;
+    return prune_trips();
 }
 
 /* --- trip lifecycle --- */
@@ -177,10 +248,12 @@ uint32_t store_start_trip(int algorithm_version)
 {
     if (!s_ready || s_active_id) return s_active_id;
     /* allocate id = max existing + 1 */
-    uint32_t ids[256];
-    int nids = scan_trip_ids(ids, 256);
+    uint32_t *ids;
+    int nids = scan_trip_ids(&ids);
+    if (nids < 0) return 0;
     uint32_t maxid = 0;
     for (int i = 0; i < nids; i++) if (ids[i] > maxid) maxid = ids[i];
+    free(ids);
     s_active_id = maxid + 1;
     s_active_start_ms = epoch_now_ms();
     s_active_start_mono_ms = esp_timer_get_time() / 1000;
@@ -210,7 +283,31 @@ uint32_t store_start_trip(int algorithm_version)
     t.algorithm_version = (uint32_t)algorithm_version;
     strncpy(t.label, s_active_label, sizeof(t.label) - 1);
     t.completed = 0;
-    write_trip_file(&t);
+    if (write_trip_file(&t) != ESP_OK) {
+        s_active_id = 0;
+        return 0;
+    }
+    /* Separate sidecar preserves compatibility with existing binary trip headers. */
+    char path[96];
+    snprintf(path, sizeof(path), TRIPS_DIR "/trip_%03lu.filter.json", (unsigned long)s_active_id);
+    FILE *filter = fopen(path, "wb");
+    if (!filter) {
+        ESP_LOGE(TAG, "Cannot record trip filtering configuration: %s", strerror(errno));
+    } else {
+        bool enabled = settings_bool("vibrationEnabled");
+        float normal = (float)settings_num("fast");
+        int strength = (int)settings_num("vibrationStrength");
+        int written = fprintf(filter,
+            "{\"vibrationEnabled\":%s,\"vibrationStrength\":%d,\"fastHz\":%.3f,"
+            "\"slowHz\":%.3f,\"sampleHz\":%d,\"tripSampleHz\":%d,\"firmware\":\"%s\","
+            "\"impactStartG\":%.9g,\"impactEndG\":%.9g}",
+            enabled ? "true" : "false", strength,
+            enabled ? motion_vibration_cutoff(strength, normal) : normal,
+            settings_num("slow"), SAMPLE_HZ, TRIP_SAMPLE_HZ, FIRMWARE_VERSION,
+            settings_num("impactStart"), settings_num("impactEnd"));
+        int closed = fclose(filter);
+        if (written < 0 || closed) ESP_LOGE(TAG, "Cannot save trip filtering configuration");
+    }
     ESP_LOGI(TAG, "Trip %lu started (%s)", (unsigned long)s_active_id, s_active_label);
     return s_active_id;
 }
@@ -237,9 +334,7 @@ void store_end_trip(const algorithm_cfg_t *cfg)
         t.id = s_active_id;
     }
 
-    t.duration_seconds = 0;
-    /* duration from samples: derive from sample_count at 5 Hz */
-    t.duration_seconds = t.sample_count / TRIP_SAMPLE_HZ;
+    t.duration_seconds = (uint32_t)((esp_timer_get_time() / 1000 - s_active_start_mono_ms) / 1000);
     t.rsi_mean = s_rsi_updates ? s_rsi_sum / s_rsi_updates : 0.0f;
     t.rsi_max = s_rsi_max;
     t.rsi_p95 = compute_p95();
@@ -263,24 +358,11 @@ void store_end_trip(const algorithm_cfg_t *cfg)
     t.mei_trip = motion_exposure_score(s_sum_a2, s_dose4, s_exposure_seconds, cfg);
 
     t.completed = 1;
-    write_trip_file(&t);
+    if (write_trip_file(&t) != ESP_OK) return;
     ESP_LOGI(TAG, "Trip %lu ended (rsi=%.2f mei=%.2f)", (unsigned long)s_active_id, t.rsi_trip, t.mei_trip);
     s_active_id = 0;
 
-    /* retention: delete oldest completed trips beyond TRIP_RETENTION */
-    {
-        uint32_t ids[TRIP_RETENTION + 16];
-        int nids = scan_trip_ids(ids, (int)(sizeof(ids) / sizeof(ids[0])));
-        for (int i = 0; i < nids - 1; i++)   /* ascending */
-            for (int j = i + 1; j < nids; j++)
-                if (ids[j] < ids[i]) { uint32_t tmp = ids[i]; ids[i] = ids[j]; ids[j] = tmp; }
-        for (int i = 0; i + TRIP_RETENTION < nids; i++) {
-            char p[64];
-            make_meta_path(ids[i], p, sizeof(p)); remove(p);
-            trip_path(ids[i], p, sizeof(p)); remove(p);
-            ESP_LOGI(TAG, "Retention: deleted oldest trip %lu", (unsigned long)ids[i]);
-        }
-    }
+    if (prune_trips() != ESP_OK) ESP_LOGE(TAG, "Trip retention incomplete");
 }
 
 bool     store_trip_active(void) { return s_active_id != 0; }
@@ -321,8 +403,15 @@ void store_add_sample(uint32_t elapsed_ms, float roll_deg, float pitch_deg,
             .ax1000 = b16(ax_g * 1000.0f), .ay1000 = b16(ay_g * 1000.0f),
             .az1000 = b16(az_g * 1000.0f), .res1000 = b16(resultant_g * 1000.0f),
         };
-        fwrite(&r, sizeof(r), 1, f);
-        fclose(f);
+        bool written = fwrite(&r, sizeof(r), 1, f) == 1;
+        int closed = fclose(f);
+        if (!written || closed) {
+            ESP_LOGE(TAG, "Trip sample write failed: %s", path);
+            return;
+        }
+    } else {
+        ESP_LOGE(TAG, "Cannot append trip sample %s: %s", path, strerror(errno));
+        return;
     }
     /* update header metadata */
     trip_file_t t;
@@ -406,6 +495,30 @@ void store_heatmap_reset(void)
 }
 
 /* --- queries --- */
+char *store_trip_filter_json(uint32_t trip_id)
+{
+    char path[96], text[512];
+    snprintf(path, sizeof(path), TRIPS_DIR "/trip_%03lu.filter.json", (unsigned long)trip_id);
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        if (errno != ENOENT) ESP_LOGE(TAG, "Cannot read filter configuration %s", path);
+        return NULL;
+    }
+    size_t bytes = fread(text, 1, sizeof(text) - 1, f);
+    bool failed = ferror(f) || !feof(f);
+    fclose(f);
+    text[bytes] = 0;
+    cJSON *config = failed ? NULL : cJSON_Parse(text);
+    if (!cJSON_IsObject(config)) {
+        ESP_LOGE(TAG, "Invalid trip filter configuration: %s", path);
+        cJSON_Delete(config);
+        return NULL;
+    }
+    char *json = cJSON_PrintUnformatted(config);
+    cJSON_Delete(config);
+    return json;
+}
+
 bool store_trip_meta(uint32_t trip_id, trip_meta_t *out)
 {
     trip_file_t t;
@@ -431,8 +544,9 @@ bool store_trip_meta(uint32_t trip_id, trip_meta_t *out)
 
 int store_list_trips(trip_meta_t *out, int max)
 {
-    uint32_t ids[256];
-    int nids = scan_trip_ids(ids, 256);
+    uint32_t *ids;
+    int nids = scan_trip_ids(&ids);
+    if (nids < 0) return -1;
     /* newest first */
     for (int i = 0; i < nids - 1; i++)
         for (int j = i + 1; j < nids; j++)
@@ -458,6 +572,7 @@ int store_list_trips(trip_meta_t *out, int max)
         m->active = false;
         n++;
     }
+    free(ids);
     return n;
 }
 
@@ -507,13 +622,27 @@ int store_trip_impacts(uint32_t trip_id, impact_rec_t *out, int max)
 bool store_clear_history(void)
 {
     if (s_active_id) return false;
-    for (uint32_t i = 1; i < 1000; i++) {
-        char p[64];
-        trip_path(i, p, sizeof(p)); remove(p);
-        snprintf(p, sizeof(p), TRIPS_DIR "/trip_%03lu.meta", (unsigned long)i); remove(p);
+    uint32_t *ids;
+    int count = scan_trip_ids(&ids);
+    if (count < 0) return false;
+    bool ok = true;
+    for (int i = 0; i < count; i++) {
+        char p[96];
+        const char *extensions[] = { "bin", "meta", "filter.json" };
+        for (size_t j = 0; j < sizeof(extensions) / sizeof(extensions[0]); j++) {
+            snprintf(p, sizeof(p), TRIPS_DIR "/trip_%03lu.%s", (unsigned long)ids[i], extensions[j]);
+            if (remove(p) && errno != ENOENT) {
+                ESP_LOGE(TAG, "Cannot clear %s: %s", p, strerror(errno));
+                ok = false;
+            }
+        }
     }
-    remove(IMPACTS_FILE);
-    return true;
+    free(ids);
+    if (remove(IMPACTS_FILE) && errno != ENOENT) {
+        ESP_LOGE(TAG, "Cannot clear impacts: %s", strerror(errno));
+        ok = false;
+    }
+    return ok;
 }
 
 static void iso_utc(int64_t ms, char *buf, size_t len)
@@ -526,10 +655,17 @@ static void iso_utc(int64_t ms, char *buf, size_t len)
 
 esp_err_t store_trips_csv(char *buf, size_t cap, size_t *out_len)
 {
-    trip_meta_t trips[32];
-    int n = store_list_trips(trips, 32);
+    trip_meta_t *trips = malloc(TRIP_RETENTION * sizeof(*trips));
+    if (!trips) return ESP_ERR_NO_MEM;
+    int n = store_list_trips(trips, TRIP_RETENTION);
+    if (n < 0) { free(trips); return ESP_FAIL; }
     int w = snprintf(buf, cap, "trip_id,start_utc,end_utc,timezone,label,duration_s,samples,rsi_trip,mei_trip,max_roll_deg,max_pitch_deg,max_resultant_g\r\n");
-    for (int i = 0; i < n && w < (int)cap - 128; i++) {
+    for (int i = 0; i < n; i++) {
+        if (w < 0 || (size_t)w >= cap) {
+            ESP_LOGE(TAG, "Trip CSV buffer too small");
+            free(trips);
+            return ESP_ERR_NO_MEM;
+        }
         char iso[32]; iso_utc(trips[i].start_ms, iso, sizeof(iso));
         w += snprintf(buf + w, cap - w, "%lu,%s,,%s,\"%s\",%lu,%lu,%.3f,%.3f,%.2f,%.2f,%.4f\r\n",
                       (unsigned long)trips[i].id, iso, "UTC", trips[i].label,
@@ -537,6 +673,8 @@ esp_err_t store_trips_csv(char *buf, size_t cap, size_t *out_len)
                       trips[i].rsi_trip, trips[i].mei_trip, trips[i].max_roll, trips[i].max_pitch,
                       trips[i].max_resultant_g);
     }
+    free(trips);
+    if (w < 0 || (size_t)w >= cap) return ESP_ERR_NO_MEM;
     if (out_len) *out_len = w;
     return ESP_OK;
 }

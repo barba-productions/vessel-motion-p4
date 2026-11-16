@@ -90,7 +90,8 @@ static esp_err_t telemetry_get(httpd_req_t *req)
 static esp_err_t health_get(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "application/json");
-    return httpd_resp_sendstr(req, "{\"status\":\"ok\",\"version\":\"0.1.7-p4\"}");
+    return httpd_resp_sendstr(req, "{\"status\":\"ok\",\"product\":\"" FIRMWARE_PRODUCT
+                             "\",\"version\":\"" FIRMWARE_VERSION "\"}");
 }
 
 /* WebSocket /ws — clients register; server pushes at 50 Hz from push_telemetry */
@@ -138,32 +139,15 @@ static esp_err_t command_post(httpd_req_t *req)
 /* GET /theme.js — window.vmUiSettings generated from live settings (Pi theme()). */
 static esp_err_t theme_get(httpd_req_t *req)
 {
-    char *buf = malloc(1024);
-    if (!buf) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
-    int w = snprintf(buf, 1024, "window.vmUiSettings={");
-    const char *str_keys[] = { "productName", "vessel", "vesselModel", "timezone" };
-    for (size_t i = 0; i < sizeof(str_keys) / sizeof(str_keys[0]); i++) {
-        w += snprintf(buf + w, 1024 - w, "%s\"%s\":\"%s\"", i ? "," : "",
-                      str_keys[i], settings_str(str_keys[i]));
-    }
-    const char *int_keys[] = {
-        "productSize", "uiFont", "colorScheme",
-        "originalScale", "originalVertical", "originalElevation", "originalYaw",
-        "tugScale", "tugVertical", "tugElevation", "tugYaw",
-        "yachtScale", "yachtVertical", "yachtElevation", "yachtYaw",
-        "superyachtScale", "superyachtVertical", "superyachtElevation", "superyachtYaw",
-        "garminRefresh",
-    };
-    for (size_t i = 0; i < sizeof(int_keys) / sizeof(int_keys[0]); i++) {
-        w += snprintf(buf + w, 1024 - w, ",\"%s\":%d", int_keys[i],
-                      (int)settings_num(int_keys[i]));
-    }
-    const char *bool_keys[] = { "fullscreen", "hideKioskCursor", "reloadOnTab" };
-    for (size_t i = 0; i < sizeof(bool_keys) / sizeof(bool_keys[0]); i++) {
-        w += snprintf(buf + w, 1024 - w, ",\"%s\":%s", bool_keys[i],
-                      settings_bool(bool_keys[i]) ? "true" : "false");
-    }
-    w += snprintf(buf + w, 1024 - w, "};");
+    char *json = settings_json_string_public(ALGORITHM_VERSION);
+    if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
+    const char *suffix = ";document.documentElement.dataset.wireless="
+                         "window.vmUiSettings.wirelessAllowed?'allowed':'disabled';";
+    size_t capacity = strlen(json) + strlen(suffix) + 32;
+    char *buf = malloc(capacity);
+    if (!buf) { free(json); return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom"); }
+    int w = snprintf(buf, capacity, "window.vmUiSettings=%s%s", json, suffix);
+    free(json);
     httpd_resp_set_type(req, "application/javascript");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     esp_err_t r = httpd_resp_send(req, buf, w);
@@ -176,24 +160,30 @@ static esp_err_t trips_get(httpd_req_t *req)
 {
     /* trip_meta_t carries a 400-float heatmap (~1.7 KB each) — heap, not stack.
      * 100 trips land in PSRAM (CONFIG_SPIRAM_USE_MALLOC). */
-    trip_meta_t *trips = malloc(100 * sizeof(trip_meta_t));
-    char *buf = malloc(24576);
+    trip_meta_t *trips = malloc(TRIP_RETENTION * sizeof(trip_meta_t));
+    size_t capacity = TRIP_RETENTION * 320u + 256u;
+    char *buf = malloc(capacity);
     if (!trips || !buf) {
         free(trips); free(buf);
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     }
-    int n = store_list_trips(trips, 100);
-    int w = snprintf(buf, 24576, "{\"trips\":[");
+    int n = store_list_trips(trips, TRIP_RETENTION);
+    if (n < 0) {
+        free(trips); free(buf);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "trip scan failed");
+    }
+    int w = snprintf(buf, capacity, "{\"trips\":[");
     for (int i = 0; i < n; i++) {
-        w += snprintf(buf + w, 24576 - w,
+        w += snprintf(buf + w, capacity - w,
                       "%s{\"id\":%lu,\"label\":\"%s\",\"startMs\":%lld,\"timeVerified\":true,"
                       "\"durationSeconds\":%lu,\"samples\":%lu,\"rsiTrip\":%.3f,\"meiTrip\":%.3f}",
                       i ? "," : "", (unsigned long)trips[i].id, trips[i].label,
                       (long long)trips[i].start_ms, (unsigned long)trips[i].duration_seconds,
                       (unsigned long)trips[i].sample_count, trips[i].rsi_trip, trips[i].mei_trip);
     }
-    w += snprintf(buf + w, 24576 - w,
-                  "],\"maximum\":100,\"sampleIntervalSeconds\":0.2,\"maximumDurationSeconds\":28800}");
+    w += snprintf(buf + w, capacity - w,
+                  "],\"maximum\":%d,\"sampleIntervalSeconds\":%.6f,\"maximumDurationSeconds\":%d}",
+                  TRIP_RETENTION, 1.0 / TRIP_SAMPLE_HZ, MAX_TRIP_SECONDS);
     free(trips);
     httpd_resp_set_type(req, "application/json");
     esp_err_t r = httpd_resp_send(req, buf, w);
@@ -264,7 +254,9 @@ static esp_err_t trip_detail_get(httpd_req_t *req)
     for (int i = 0; i < 400 && w < cap - 16; i++) {
         w += snprintf(buf + w, cap - w, "%s%.2f", i ? "," : "", (double)m.heatmap[i]);
     }
-    w += snprintf(buf + w, cap - w, "]}");
+    char *filter_config = store_trip_filter_json(id);
+    w += snprintf(buf + w, cap - w, "],\"filterConfig\":%s}", filter_config ? filter_config : "null");
+    free(filter_config);
     free(impacts);
     httpd_resp_set_type(req, "application/json");
     esp_err_t r = httpd_resp_send(req, buf, w);
@@ -284,10 +276,11 @@ static esp_err_t trip_current_get(httpd_req_t *req)
         int64_t mono = esp_timer_get_time() / 1000 - store_active_trip_start_mono_ms();
         snprintf(buf, sizeof(buf),
                  "{\"active\":true,\"id\":%lu,\"durationSeconds\":%lu,\"samples\":%lu,"
-                 "\"headerBytes\":0,\"sampleIntervalSeconds\":0.2,\"startMs\":%lld,\"label\":\"%s\"}",
+                 "\"headerBytes\":0,\"sampleIntervalSeconds\":%.6f,\"startMs\":%lld,\"label\":\"%s\"}",
                  (unsigned long)store_active_trip_id(),
                  (unsigned long)(mono > 0 ? mono / 1000 : 0),
                  (unsigned long)store_active_trip_samples(),
+                 1.0 / TRIP_SAMPLE_HZ,
                  (long long)store_active_trip_start_ms(), label);
     }
     httpd_resp_set_type(req, "application/json");
@@ -330,7 +323,7 @@ static esp_err_t overview_samples_get(httpd_req_t *req)
 /* GET /api/settings — full settings + computed extras (Pi get_settings). */
 static esp_err_t settings_get_handler(httpd_req_t *req)
 {
-    char *js = settings_json_string_public(1 /* AlgorithmConfig.version */);
+    char *js = settings_json_string_public(ALGORITHM_VERSION);
     if (!js) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     httpd_resp_set_type(req, "application/json");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
@@ -395,8 +388,15 @@ static esp_err_t settings_form_post(httpd_req_t *req)
             if (!((*c >= 'a' && *c <= 'z') || (*c >= '0' && *c <= '9'))) { *c = 0; break; }
         }
     }
-    settings_update_form(body);
+    esp_err_t result = settings_update_form(body);
     free(body);
+    if (result != ESP_OK) {
+        return httpd_resp_send_err(req, result == ESP_ERR_INVALID_ARG ?
+            HTTPD_400_BAD_REQUEST : HTTPD_500_INTERNAL_SERVER_ERROR,
+            result == ESP_ERR_INVALID_ARG ?
+            "Invalid setting, or filters/impact thresholds changed during a trip; stop the trip first" :
+            "Settings could not be saved");
+    }
     settings_applied();
     char loc[64];
     snprintf(loc, sizeof(loc), "%s%s%s", to_advanced ? "/advanced-settings" : "/settings",
@@ -837,6 +837,7 @@ static esp_err_t ota_status_get(httpd_req_t *req)
              s.state, s.current_version, s.available_version, s.message,
              (unsigned long)s.received, (unsigned long)s.total, s.progress);
     httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_sendstr(req, buf);
 }
 
@@ -865,11 +866,16 @@ static esp_err_t ota_start_post(httpd_req_t *req)
 /* CSV exports — stream to a temp file on SD then send */
 static esp_err_t export_csv(httpd_req_t *req, bool trips)
 {
-    char *buf = malloc(32 * 1024);
+    size_t capacity = trips ? TRIP_RETENTION * 320u + 256u : 32u * 1024u;
+    char *buf = malloc(capacity);
     if (!buf) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom");
     size_t len = 0;
-    if (trips) store_trips_csv(buf, 32 * 1024, &len);
-    else store_impacts_csv(buf, 32 * 1024, &len);
+    esp_err_t result = trips ? store_trips_csv(buf, capacity, &len) :
+                               store_impacts_csv(buf, capacity, &len);
+    if (result != ESP_OK) {
+        free(buf);
+        return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "CSV export failed");
+    }
     httpd_resp_set_type(req, "text/csv");
     httpd_resp_set_hdr(req, "Content-Disposition",
                        trips ? "attachment; filename=trips.csv" : "attachment; filename=impacts.csv");
@@ -963,7 +969,7 @@ static esp_err_t index_get(httpd_req_t *req)
 
 /* ---- Pi-compatible template rendering (api.py render_shared_header) ---- */
 
-#define P4_VERSION "1.0.4"
+#define P4_VERSION FIRMWARE_VERSION
 
 static char *read_text_file(const char *path)
 {
@@ -1105,7 +1111,7 @@ static esp_err_t settings_get(httpd_req_t *req)
         "if(s&&!s.querySelector('option[value=\"superyacht\"]')){"
         "var o=document.createElement(\"option\");o.value=\"superyacht\";"
         "o.textContent=\"SUPERYACHT\";s.appendChild(o)}})</script>";
-    const char *settings_js = "<script src=\"/settings-pi.js\"></script>";
+    const char *settings_js = "<script src=\"/settings-pi.js?v=" FIRMWARE_VERSION "\"></script>";
     size_t tail_len = strlen(dom_patch) + (advanced ? 0 : strlen(settings_js));
     char *tail = malloc(tail_len + 1);
     if (!tail) { free(content); return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom"); }
@@ -1129,6 +1135,14 @@ static esp_err_t settings_get(httpd_req_t *req)
     esp_err_t r = httpd_resp_send(req, content, strlen(content));
     free(content);
     return r;
+}
+
+static esp_err_t wireless_disabled(httpd_req_t *req)
+{
+    ESP_LOGW(TAG, "Wireless API blocked by firmware policy");
+    httpd_resp_set_status(req, "403 Forbidden");
+    httpd_resp_set_type(req, "application/json");
+    return httpd_resp_sendstr(req, "{\"error\":\"Wireless is disabled by firmware policy\"}");
 }
 
 esp_err_t webserver_start(void)
@@ -1191,7 +1205,10 @@ esp_err_t webserver_start(void)
         { .uri = "/ws", .method = HTTP_GET, .handler = ws_handler, .is_websocket = true },
     };
     for (size_t i = 0; i < sizeof(uris) / sizeof(uris[0]); i++) {
-        httpd_register_uri_handler(s_server, &uris[i]);
+        httpd_uri_t route = uris[i];
+        if (!WIRELESS_ALLOWED && !strncmp(route.uri, "/api/wifi/", 10))
+            route.handler = wireless_disabled;
+        ESP_ERROR_CHECK(httpd_register_uri_handler(s_server, &route));
     }
     /* Wildcard: dashboard static assets (css/js/models/fonts) from SD */
     const httpd_uri_t wildcard = {

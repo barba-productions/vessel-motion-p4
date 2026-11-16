@@ -2,14 +2,16 @@
 	"version": "2.0.0",
 	"tasks": [
 		{
-			"label": "Flash P4 and list web FS",
-			"type": "shell",
-			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File \"c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\flash_p4.ps1\""
+			"label": "Flash P4",
+			"type": "process",
+			"command": "powershell",
+			"args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\flash_p4.ps1"]
 		},
 		{
-			"label": "Flash P4 and list web FS (sq)",
-			"type": "shell",
-			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\flash_p4.ps1'"
+			"label": "Flash P4 and monitor",
+			"type": "process",
+			"command": "powershell",
+			"args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\flash_p4.ps1", "-Monitor"]
 		},
 		{
 			"label": "Locate P4 web assets",
@@ -23,8 +25,9 @@
 		},
 		{
 			"label": "Build flash stage web assets",
-			"type": "shell",
-			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\stage_web.ps1'"
+			"type": "process",
+			"command": "powershell",
+			"args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\stage_web.ps1"]
 		},
 		{
 			"label": "Find theme.js and web file list",
@@ -98,13 +101,15 @@
 		},
 		{
 			"label": "P4 build",
-			"type": "shell",
-			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\build_p4.ps1'"
+			"type": "process",
+			"command": "powershell",
+			"args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\build_p4.ps1"]
 		},
 		{
 			"label": "P4 final build",
-			"type": "shell",
-			"command": "powershell -NoProfile -ExecutionPolicy Bypass -File 'c:\\Users\\barba\\OneDrive\\Documents\\___Arduino\\Project 28. Vessel Motion P4\\build_p4.ps1'"
+			"type": "process",
+			"command": "powershell",
+			"args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}\\build_p4.ps1"]
 		},
 		{
 			"label": "Survey resources file timestamps",

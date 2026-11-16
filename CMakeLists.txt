@@ -12,4 +12,19 @@ if(NOT DEFINED ENV{IDF_COMPONENT_CACHE_PATH})
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(vessel_motion_p4 VERSION 1.0.4)
+set(COMPONENTS main)
+if(NOT DEFINED WIRELESS_ALLOWED)
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/main/globals.h" WIRELESS_LINE
+         REGEX "^#define WIRELESS_ALLOWED [01]$")
+    string(REGEX REPLACE ".* ([01])$" "\\1" WIRELESS_ALLOWED "${WIRELESS_LINE}")
+endif()
+if(NOT WIRELESS_ALLOWED MATCHES "^[01]$")
+    message(FATAL_ERROR "WIRELESS_ALLOWED must be 0 or 1")
+endif()
+set(ENV{VESSEL_WIRELESS_ALLOWED} "${WIRELESS_ALLOWED}")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/main/globals.h")
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/main/globals.h" VERSION_LINE
+     REGEX "^#define FIRMWARE_VERSION ")
+string(REGEX REPLACE ".*\"([^\"]+)\".*" "\\1" PROJECT_VER "${VERSION_LINE}")
+project(vessel_motion_p4)

@@ -3,6 +3,9 @@
  * Keys/defaults are a 1:1 copy of the Pi project's storage.py DEFAULT_SETTINGS.
  */
 #include "settings.h"
+#include "globals.h"
+#include "store.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -32,16 +35,19 @@ typedef struct {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static const default_t DEFAULTS[] = {
-    { "vessel", T_STR, "Vessel" },
-    { "hostname", T_STR, "vessel-motion" },
-    { "timezone", T_STR, "UTC" },
+    { "vessel", T_STR, DEFAULT_VESSEL_NAME },
+    { "hostname", T_STR, DEFAULT_HOSTNAME },
+    { "timezone", T_STR, DEFAULT_TIMEZONE },
     { "timeFormat", T_STR, "24" },
     { "dateFormat", T_STR, "mdy" },
     { "metric", T_BOOL, NULL, 1 },
-    { "rsi", T_BOOL, NULL, 1 },
-    { "mei", T_BOOL, NULL, 1 },
+    { "rsi", T_BOOL, NULL, DEFAULT_RSI_ENABLED },
+    { "mei", T_BOOL, NULL, DEFAULT_MEI_ENABLED },
     { "fullscreen", T_BOOL, NULL, 1 },
-    { "productName", T_STR, "VESSEL MOTION" },
+    { "productName", T_STR, DEFAULT_PRODUCT_NAME },
+    { "attitudeYRange", T_INT, NULL, DEFAULT_ATTITUDE_Y_RANGE_DEG },
+    { "vibrationEnabled", T_BOOL, NULL, DEFAULT_VIBRATION_ENABLED },
+    { "vibrationStrength", T_INT, NULL, DEFAULT_VIBRATION_STRENGTH },
     { "productSize", T_INT, NULL, 2 },
     { "uiFont", T_INT, NULL, 0 },
     { "colorScheme", T_INT, NULL, 0 },
@@ -57,49 +63,49 @@ static const default_t DEFAULTS[] = {
     { "gyroOffset", T_ARR_F3, NULL, 0, {0, 0, 0} },
     { "rollZero", T_FLOAT, NULL, 0.0 },
     { "pitchZero", T_FLOAT, NULL, 0.0 },
-    { "dhcp", T_BOOL, NULL, 1 },
-    { "ip", T_STR, "192.168.1.90" },
-    { "subnet", T_STR, "255.255.255.0" },
-    { "gateway", T_STR, "192.168.1.1" },
-    { "dns", T_STR, "192.168.1.1" },
+    { "dhcp", T_BOOL, NULL, DEFAULT_NETWORK_DHCP },
+    { "ip", T_STR, DEFAULT_IP_ADDRESS },
+    { "subnet", T_STR, DEFAULT_SUBNET_MASK },
+    { "gateway", T_STR, DEFAULT_GATEWAY },
+    { "dns", T_STR, DEFAULT_DNS_SERVER },
     { "wifiAuto", T_BOOL, NULL, 1 },
     { "resetOnTripStart", T_BOOL, NULL, 0 },
     { "hideKioskCursor", T_BOOL, NULL, 1 },
     { "garminRefresh", T_INT, NULL, 20 },
-    { "alpha", T_FLOAT, NULL, 0.98 },
-    { "fast", T_FLOAT, NULL, 25.0 },
-    { "slow", T_FLOAT, NULL, 4.0 },
-    { "derivative", T_FLOAT, NULL, 12.0 },
-    { "impactStart", T_FLOAT, NULL, 0.25 },
-    { "impactEnd", T_FLOAT, NULL, 0.15 },
-    { "impactEndMs", T_INT, NULL, 100 },
-    { "impactDeadbandMs", T_INT, NULL, 150 },
-    { "peakLow", T_FLOAT, NULL, 0.10 },
-    { "peakHigh", T_FLOAT, NULL, 1.50 },
-    { "rmsLow", T_FLOAT, NULL, 0.03 },
-    { "rmsHigh", T_FLOAT, NULL, 0.50 },
-    { "jerkLow", T_FLOAT, NULL, 0.5 },
-    { "jerkHigh", T_FLOAT, NULL, 15.0 },
-    { "rollLow", T_FLOAT, NULL, 2.0 },
-    { "rollHigh", T_FLOAT, NULL, 25.0 },
-    { "pitchLow", T_FLOAT, NULL, 2.0 },
-    { "pitchHigh", T_FLOAT, NULL, 25.0 },
-    { "repeatLow", T_FLOAT, NULL, 1.0 },
-    { "repeatHigh", T_FLOAT, NULL, 20.0 },
-    { "impactLow", T_FLOAT, NULL, 0.25 },
-    { "impactHigh", T_FLOAT, NULL, 1.50 },
-    { "exponent", T_FLOAT, NULL, 2.0 },
-    { "rsiWeights", T_STR, "0.35,0.25,0.20,0.10,0.10" },
-    { "attack", T_FLOAT, NULL, 0.20 },
-    { "decay", T_FLOAT, NULL, 5.0 },
-    { "meiAxis", T_STR, "1,1,1" },
-    { "meiRmsLow", T_FLOAT, NULL, 0.02 },
-    { "meiRmsHigh", T_FLOAT, NULL, 0.30 },
-    { "meiShockLow", T_FLOAT, NULL, 0.03 },
-    { "meiShockHigh", T_FLOAT, NULL, 0.50 },
-    { "meiTau", T_FLOAT, NULL, 4.0 },
-    { "meiCurrentWeights", T_STR, "0.45,0.35,0.20" },
-    { "meiTripWeights", T_STR, "0.40,0.40,0.20" },
+    { "alpha", T_FLOAT, NULL, DEFAULT_ALPHA },
+    { "fast", T_FLOAT, NULL, DEFAULT_FAST_HZ },
+    { "slow", T_FLOAT, NULL, DEFAULT_SLOW_HZ },
+    { "derivative", T_FLOAT, NULL, DEFAULT_DERIVATIVE_HZ },
+    { "impactStart", T_FLOAT, NULL, DEFAULT_IMPACT_START_G },
+    { "impactEnd", T_FLOAT, NULL, DEFAULT_IMPACT_END_G },
+    { "impactEndMs", T_INT, NULL, DEFAULT_IMPACT_END_MS },
+    { "impactDeadbandMs", T_INT, NULL, DEFAULT_IMPACT_DEADBAND_MS },
+    { "peakLow", T_FLOAT, NULL, DEFAULT_PEAK_LOW },
+    { "peakHigh", T_FLOAT, NULL, DEFAULT_PEAK_HIGH },
+    { "rmsLow", T_FLOAT, NULL, DEFAULT_RMS_LOW },
+    { "rmsHigh", T_FLOAT, NULL, DEFAULT_RMS_HIGH },
+    { "jerkLow", T_FLOAT, NULL, DEFAULT_JERK_LOW },
+    { "jerkHigh", T_FLOAT, NULL, DEFAULT_JERK_HIGH },
+    { "rollLow", T_FLOAT, NULL, DEFAULT_ROLL_LOW },
+    { "rollHigh", T_FLOAT, NULL, DEFAULT_ROLL_HIGH },
+    { "pitchLow", T_FLOAT, NULL, DEFAULT_PITCH_LOW },
+    { "pitchHigh", T_FLOAT, NULL, DEFAULT_PITCH_HIGH },
+    { "repeatLow", T_FLOAT, NULL, DEFAULT_REPEAT_LOW },
+    { "repeatHigh", T_FLOAT, NULL, DEFAULT_REPEAT_HIGH },
+    { "impactLow", T_FLOAT, NULL, DEFAULT_IMPACT_LOW },
+    { "impactHigh", T_FLOAT, NULL, DEFAULT_IMPACT_HIGH },
+    { "exponent", T_FLOAT, NULL, DEFAULT_EXPONENT },
+    { "rsiWeights", T_STR, DEFAULT_RSI_WEIGHTS_CSV },
+    { "attack", T_FLOAT, NULL, DEFAULT_ATTACK_SECONDS },
+    { "decay", T_FLOAT, NULL, DEFAULT_DECAY_SECONDS },
+    { "meiAxis", T_STR, DEFAULT_MEI_AXIS_CSV },
+    { "meiRmsLow", T_FLOAT, NULL, DEFAULT_MEI_RMS_LOW },
+    { "meiRmsHigh", T_FLOAT, NULL, DEFAULT_MEI_RMS_HIGH },
+    { "meiShockLow", T_FLOAT, NULL, DEFAULT_MEI_SHOCK_LOW },
+    { "meiShockHigh", T_FLOAT, NULL, DEFAULT_MEI_SHOCK_HIGH },
+    { "meiTau", T_FLOAT, NULL, DEFAULT_MEI_TAU_HOURS },
+    { "meiCurrentWeights", T_STR, DEFAULT_MEI_CURRENT_WEIGHTS_CSV },
+    { "meiTripWeights", T_STR, DEFAULT_MEI_TRIP_WEIGHTS_CSV },
     { "originalScale", T_INT, NULL, 100 },
     { "originalVertical", T_INT, NULL, 0 },
     { "originalElevation", T_INT, NULL, 0 },
@@ -128,10 +134,54 @@ static const char *ALGORITHM_KEYS[] = {
     "impactHigh", "exponent", "rsiWeights", "attack", "decay", "meiAxis",
     "meiRmsLow", "meiRmsHigh", "meiShockLow", "meiShockHigh", "meiTau",
     "meiCurrentWeights", "meiTripWeights",
+    "vibrationEnabled", "vibrationStrength",
 };
 
 static cJSON *s_settings;
 static SemaphoreHandle_t s_mtx;
+static const double IMPACT_LEVELS[][2] = IMPACT_THRESHOLD_LEVELS_G;
+_Static_assert(sizeof(IMPACT_LEVELS) / sizeof(IMPACT_LEVELS[0]) == 5,
+               "Impact slider requires five start/end threshold pairs");
+
+static const char *validate_impact_pair(double start, double end)
+{
+    return isfinite(start) && isfinite(end) && start > 0 && end > 0 && end < start ?
+           NULL : "Impact thresholds must be positive, with end below start";
+}
+
+static const char *validate_control(const char *key, const cJSON *item)
+{
+    if (!strcmp(key, "vibrationEnabled")) {
+        return cJSON_IsBool(item) ? NULL : "Vibration enabled must be boolean";
+    }
+    if (!strcmp(key, "attitudeYRange") || !strcmp(key, "vibrationStrength")) {
+        int max = !strcmp(key, "attitudeYRange") ? 90 : 5;
+        if (!cJSON_IsNumber(item) || !isfinite(item->valuedouble) ||
+            item->valuedouble != floor(item->valuedouble) ||
+            item->valuedouble < 1 || item->valuedouble > max) {
+            return max == 90 ? "Attitude range must be an integer from 1 to 90" :
+                               "Vibration strength must be an integer from 1 to 5";
+        }
+    }
+    if (!strcmp(key, "fast") || !strcmp(key, "slow") || !strcmp(key, "derivative")) {
+        if (!cJSON_IsNumber(item) || !isfinite(item->valuedouble) ||
+            item->valuedouble <= 0 || item->valuedouble >= SAMPLE_HZ / 2.0) {
+            return "Filter cutoff must be positive and below half the sampling rate";
+        }
+        if (!strcmp(key, "impactStart") || !strcmp(key, "impactEnd")) {
+            if (!cJSON_IsNumber(item) || !isfinite(item->valuedouble) || item->valuedouble <= 0)
+                return "Impact thresholds must be positive numbers";
+        }
+    }
+    return NULL;
+}
+
+static bool filter_key(const char *key)
+{
+    return !strcmp(key, "vibrationEnabled") || !strcmp(key, "vibrationStrength") ||
+           !strcmp(key, "fast") || !strcmp(key, "slow") || !strcmp(key, "derivative") ||
+           !strcmp(key, "impactStart") || !strcmp(key, "impactEnd");
+}
 
 static const default_t *find_default(const char *key)
 {
@@ -190,10 +240,20 @@ esp_err_t settings_init(void)
                     xSemaphoreTake(s_mtx, portMAX_DELAY);
                     cJSON *item;
                     cJSON_ArrayForEach(item, stored) {
-                        if (cJSON_GetObjectItem(s_settings, item->string)) {
+                        if (cJSON_GetObjectItem(s_settings, item->string) &&
+                            !validate_control(item->string, item)) {
                             cJSON_ReplaceItemInObject(s_settings, item->string,
                                                       cJSON_Duplicate(item, true));
+                        } else if (validate_control(item->string, item)) {
+                            ESP_LOGW(TAG, "Invalid saved %s; using firmware default", item->string);
                         }
+                    }
+                    if (validate_impact_pair(
+                            cJSON_GetObjectItem(s_settings, "impactStart")->valuedouble,
+                            cJSON_GetObjectItem(s_settings, "impactEnd")->valuedouble)) {
+                        ESP_LOGW(TAG, "Invalid saved impact threshold pair; using firmware defaults");
+                        cJSON_ReplaceItemInObject(s_settings, "impactStart", cJSON_CreateNumber(DEFAULT_IMPACT_START_G));
+                        cJSON_ReplaceItemInObject(s_settings, "impactEnd", cJSON_CreateNumber(DEFAULT_IMPACT_END_G));
                     }
                     xSemaphoreGive(s_mtx);
                     cJSON_Delete(stored);
@@ -240,6 +300,31 @@ char *settings_json_string_public(int algorithm_version)
     if (!copy) return NULL;
     /* Pi api.py get_settings extras */
     cJSON_AddNumberToObject(copy, "algorithmVersion", algorithm_version);
+    cJSON_AddBoolToObject(copy, "wirelessAllowed", WIRELESS_ALLOWED);
+    if (WIRELESS_ALLOWED) {
+        cJSON_AddStringToObject(copy, "fallbackSsid", WIFI_FALLBACK_SSID);
+        cJSON_AddStringToObject(copy, "fallbackIp", WIFI_FALLBACK_IP);
+        cJSON_AddStringToObject(copy, "fallbackPassword", WIFI_FALLBACK_PASS);
+    }
+    cJSON_AddNumberToObject(copy, "maximumTrips", TRIP_RETENTION);
+    cJSON_AddNumberToObject(copy, "maximumTripSeconds", MAX_TRIP_SECONDS);
+    static const float cutoffs[] = VIBRATION_CUTOFFS_HZ;
+    cJSON *levels = cJSON_CreateArray();
+    for (size_t i = 0; i < sizeof(cutoffs) / sizeof(cutoffs[0]); i++)
+        cJSON_AddItemToArray(levels, cJSON_CreateNumber(cutoffs[i]));
+    cJSON_AddItemToObject(copy, "vibrationCutoffsHz", levels);
+    cJSON *impact_levels = cJSON_AddArrayToObject(copy, "impactThresholdLevels");
+    for (size_t i = 0; i < sizeof(IMPACT_LEVELS) / sizeof(IMPACT_LEVELS[0]); i++) {
+        cJSON *level = cJSON_CreateObject();
+        cJSON_AddNumberToObject(level, "startG", IMPACT_LEVELS[i][0]);
+        cJSON_AddNumberToObject(level, "endG", IMPACT_LEVELS[i][1]);
+        cJSON_AddItemToArray(impact_levels, level);
+    }
+    cJSON_AddNumberToObject(copy, "effectiveFastHz",
+        cJSON_IsTrue(cJSON_GetObjectItem(copy, "vibrationEnabled")) ?
+        motion_vibration_cutoff(cJSON_GetObjectItem(copy, "vibrationStrength")->valueint,
+                               (float)cJSON_GetObjectItem(copy, "fast")->valuedouble) :
+        cJSON_GetObjectItem(copy, "fast")->valuedouble);
     cJSON_AddNumberToObject(copy, "garminRefresh", 20);
     cJSON_AddNumberToObject(copy, "graphSeconds", 600);
     cJSON_AddNumberToObject(copy, "smoothing", 0.15);
@@ -302,6 +387,17 @@ esp_err_t settings_patch_json(const char *json_body, char *errbuf, size_t errlen
             cJSON_Delete(patch);
             return ESP_ERR_INVALID_ARG;
         }
+        const char *control_err = validate_control(item->string, item);
+        bool changed = cJSON_IsBool(item) ? settings_bool(item->string) != cJSON_IsTrue(item) :
+                                           settings_num(item->string) != item->valuedouble;
+        if (!control_err && changed && filter_key(item->string) && store_trip_active()) {
+            control_err = "Stop the trip before changing measurement filters or impact thresholds";
+        }
+        if (control_err) {
+            snprintf(errbuf, errlen, "%s", control_err);
+            cJSON_Delete(patch);
+            return ESP_ERR_INVALID_ARG;
+        }
         if (!strcmp(item->string, "timeFormat") &&
             strcmp(cJSON_GetStringValue(item) ?: "", "12") &&
             strcmp(cJSON_GetStringValue(item) ?: "", "24")) {
@@ -324,6 +420,16 @@ esp_err_t settings_patch_json(const char *json_body, char *errbuf, size_t errlen
                 return ESP_ERR_INVALID_ARG;
             }
         }
+    }
+    const cJSON *start = cJSON_GetObjectItem(patch, "impactStart");
+    const cJSON *end = cJSON_GetObjectItem(patch, "impactEnd");
+    const char *pair_error = validate_impact_pair(
+        start ? start->valuedouble : settings_num("impactStart"),
+        end ? end->valuedouble : settings_num("impactEnd"));
+    if (pair_error) {
+        snprintf(errbuf, errlen, "%s", pair_error);
+        cJSON_Delete(patch);
+        return ESP_ERR_INVALID_ARG;
     }
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     cJSON_ArrayForEach(item, patch) {
@@ -356,6 +462,59 @@ static void form_decode(char *s)
 
 esp_err_t settings_update_form(const char *body)
 {
+    /* Preflight before writing any fields so rejected filters cannot partly save. */
+    char *check = strdup(body);
+    if (!check) return ESP_ERR_NO_MEM;
+    double impact_start = settings_num("impactStart");
+    double impact_end = settings_num("impactEnd");
+    char *check_save = NULL;
+    for (char *pair = strtok_r(check, "&", &check_save); pair;
+         pair = strtok_r(NULL, "&", &check_save)) {
+        char *eq = strchr(pair, '=');
+        if (!eq) continue;
+        *eq++ = 0;
+        form_decode(pair);
+        form_decode(eq);
+        if (strcmp(pair, "attitudeYRange") && !filter_key(pair)) continue;
+        cJSON *value;
+        if (!strcmp(pair, "vibrationEnabled")) {
+            if (strcmp(eq, "yes") && strcmp(eq, "no")) {
+                ESP_LOGW(TAG, "Invalid vibration enabled form value");
+                free(check);
+                return ESP_ERR_INVALID_ARG;
+            }
+            value = cJSON_CreateBool(!strcmp(eq, "yes"));
+        } else {
+            char *end;
+            double number = strtod(eq, &end);
+            if (end == eq || *end || !isfinite(number)) {
+                ESP_LOGW(TAG, "Invalid numeric form value for %s", pair);
+                free(check);
+                return ESP_ERR_INVALID_ARG;
+            }
+            value = cJSON_CreateNumber(number);
+        }
+        if (!value) { free(check); return ESP_ERR_NO_MEM; }
+        const char *error = validate_control(pair, value);
+        bool changed = cJSON_IsBool(value) ? settings_bool(pair) != cJSON_IsTrue(value) :
+                                           settings_num(pair) != value->valuedouble;
+        if (!error && changed && filter_key(pair) && store_trip_active())
+            error = "Stop the trip before changing measurement filters or impact thresholds";
+        if (!strcmp(pair, "impactStart")) impact_start = value->valuedouble;
+        if (!strcmp(pair, "impactEnd")) impact_end = value->valuedouble;
+        cJSON_Delete(value);
+        if (error) {
+            ESP_LOGW(TAG, "%s", error);
+            free(check);
+            return ESP_ERR_INVALID_ARG;
+        }
+    }
+    free(check);
+    const char *pair_error = validate_impact_pair(impact_start, impact_end);
+    if (pair_error) {
+        ESP_LOGW(TAG, "%s", pair_error);
+        return ESP_ERR_INVALID_ARG;
+    }
     char *copy = strdup(body);
     if (!copy) return ESP_ERR_NO_MEM;
     bool touched_tz = false;
@@ -404,6 +563,10 @@ esp_err_t settings_update_form(const char *body)
 
 void settings_restore_algorithm_defaults(void)
 {
+    if (store_trip_active()) {
+        ESP_LOGW(TAG, "Stop the trip before restoring algorithm defaults");
+        return;
+    }
     xSemaphoreTake(s_mtx, portMAX_DELAY);
     for (size_t i = 0; i < sizeof(ALGORITHM_KEYS) / sizeof(ALGORITHM_KEYS[0]); i++) {
         const default_t *d = find_default(ALGORITHM_KEYS[i]);

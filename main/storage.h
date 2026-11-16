@@ -14,7 +14,9 @@ extern "C" {
 #endif
 
 /* Mount point for the SD card filesystem. */
+#ifndef SD_MOUNT_POINT
 #define SD_MOUNT_POINT "/sdcard"
+#endif
 
 /* Mount the SD card (SDMMC 4-wire). Returns ESP_OK on success.
  * Safe to call once at startup; failure is non-fatal (dashboard/logs
